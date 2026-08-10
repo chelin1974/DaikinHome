@@ -1,0 +1,13 @@
+target/
+*.class
+
+# Local credentials and HomeKit pairing state - never commit these.
+daikin.config.json
+*.state.json
+daikin-home.state.json
+
+.idea/
+*.iml
+.vscode/
+.DS_Store
+*.log

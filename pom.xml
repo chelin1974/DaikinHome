@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.github.chelin1974</groupId>
+  <artifactId>daikin-home-parent</artifactId>
+  <version>1.0.0</version>
+  <packaging>pom</packaging>
+
+  <name>Daikin One HomeKit</name>
+  <description>
+    Exposes Daikin One+, One Touch and One Lite thermostats to Apple Home over the HomeKit
+    Accessory Protocol, driven by the Daikin One Cloud Open API.
+  </description>
+
+  <modules>
+    <!-- Everything that talks to Daikin and to HomeKit. No Spring, no CLI. -->
+    <module>core</module>
+    <!-- A plain runnable jar. Smallest thing that works. -->
+    <module>cli</module>
+    <!-- The same bridge inside a Spring Boot service, with a REST API and health checks. -->
+    <module>web</module>
+  </modules>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!--
+      Keeps parameter names in the bytecode. Spring needs them to bind @PathVariable and
+      @RequestParam without repeating the name in the annotation; without this every path
+      variable fails at runtime with "Name for argument of type [String] not specified".
+      spring-boot-starter-parent sets this for you, and this build does not use it.
+    -->
+    <maven.compiler.parameters>true</maven.compiler.parameters>
+
+    <hap.version>2.0.7</hap.version>
+    <jackson.version>2.18.2</jackson.version>
+    <slf4j.version>2.0.16</slf4j.version>
+    <junit.version>5.11.4</junit.version>
+    <spring-boot.version>3.5.16</spring-boot.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.github.chelin1974</groupId>
+        <artifactId>daikin-home-core</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>io.github.hap-java</groupId>
+        <artifactId>hap</artifactId>
+        <version>${hap.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson.version}</version>
+      </dependency>
+
+      <!--
+        Pinned deliberately. HAP-Java depends on slf4j-api 1.7.x, and if that version wins
+        the classpath, SLF4J 2's ServiceLoader binding is never found: the symptom is a
+        "Failed to load class org.slf4j.impl.StaticLoggerBinder" warning and every log line
+        silently discarded.
+      -->
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+        <version>${slf4j.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-simple</artifactId>
+        <version>${slf4j.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.junit.jupiter</groupId>
+        <artifactId>junit-jupiter</artifactId>
+        <version>${junit.version}</version>
+        <scope>test</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-surefire-plugin</artifactId>
+          <version>3.5.2</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-shade-plugin</artifactId>
+          <version>3.6.0</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>
