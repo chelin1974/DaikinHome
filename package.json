@@ -1,0 +1,58 @@
+{
+  "name": "homebridge-daikin-one",
+  "displayName": "Daikin One",
+  "version": "1.0.0",
+  "description": "Homebridge plugin that brings Daikin One+, One Touch and One Lite thermostats into Apple Home via the official Daikin One Cloud Open API.",
+  "license": "MIT",
+  "author": "chelin1974",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chelin1974/daikinhome.git"
+  },
+  "bugs": {
+    "url": "https://github.com/chelin1974/daikinhome/issues"
+  },
+  "engines": {
+    "node": ">=18.20.0",
+    "homebridge": "^1.8.0 || ^2.0.0"
+  },
+  "main": "dist/index.js",
+  "bin": {
+    "daikin-one-probe": "dist/tools/probe.js"
+  },
+  "files": [
+    "dist",
+    "config.schema.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "watch": "tsc --watch",
+    "probe": "npm run build && node dist/tools/probe.js",
+    "lint": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "daikin",
+    "daikin-one",
+    "thermostat",
+    "homekit",
+    "apple-home",
+    "matter",
+    "hvac"
+  ],
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "homebridge": "^2.3.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.10"
+  },
+  "peerDependencies": {
+    "homebridge": "^1.8.0 || ^2.0.0"
+  }
+}
