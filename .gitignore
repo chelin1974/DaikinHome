@@ -1,5 +1,8 @@
 node_modules/
 dist/
+target/
+java/daikin.config.json
+java/daikin-home.state.json
 coverage/
 *.log
 .DS_Store

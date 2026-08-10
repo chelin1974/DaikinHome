@@ -1,19 +1,49 @@
-# homebridge-daikin-one
+# DaikinHome
 
 Puts a Daikin One thermostat into Apple Home.
 
 Daikin has not announced native HomeKit or Matter support for the One family, and
 its documentation still points at Daikin's own app and cloud. But Daikin does
 publish a [Cloud Open API](https://daikinone.com/openapi/) covering the **One+**,
-**One Touch** and **One Lite** thermostats, with read *and* write access. This
-plugin sits on that API:
-
-```
-Daikin One  →  Daikin Cloud Open API  →  Homebridge  →  Apple Home / Siri
-```
+**One Touch** and **One Lite** thermostats, with read *and* write access. Both
+implementations here sit on that API.
 
 No hardware changes, no replacing the thermostat, and the Daikin app keeps
 working exactly as before.
+
+## Two implementations — pick one
+
+They do the same job. Choose by what you want to run and what you can maintain.
+
+### [`java/`](java/README.md) — standalone Java bridge
+
+```
+Daikin One  →  Daikin Open API  →  daikin-home.jar  →  Apple Home / Siri
+```
+
+One runnable jar. Speaks the HomeKit Accessory Protocol directly via
+[HAP-Java](https://github.com/hap-java/HAP-Java), the library behind openHAB's HomeKit
+add-on. Needs Java 21 and a machine that stays on. No Node.js, no Homebridge.
+
+**Start here if you'd rather read and change Java than TypeScript.**
+
+### Homebridge plugin (this directory) — TypeScript
+
+```
+Daikin One  →  Daikin Open API  →  Homebridge  →  Apple Home / Siri
+```
+
+A conventional Homebridge plugin, with a config form in the Homebridge UI. Worth it if you
+already run Homebridge, or want to sit alongside other plugins. On Homebridge 2.x it can
+also be exposed over Matter.
+
+It has two extras the Java bridge doesn't: an outdoor *humidity* sensor, and experimental
+schedule/fan switches.
+
+The rest of this file documents the Homebridge plugin. For the Java bridge, see
+**[java/README.md](java/README.md)**.
+
+---
 
 ## What shows up in Home
 

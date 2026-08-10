@@ -1,0 +1,34 @@
+# systemd unit for the Daikin One HomeKit bridge.
+#
+#   sudo cp daikin-home.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now daikin-home
+#   journalctl -u daikin-home -f      # the setup code is printed at startup
+#
+# Adjust User, WorkingDirectory and the jar path to match your install.
+
+[Unit]
+Description=Daikin One HomeKit bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=daikin
+WorkingDirectory=/opt/daikin-home
+ExecStart=/usr/bin/java -jar /opt/daikin-home/daikin-home.jar --config /opt/daikin-home/daikin.config.json
+Restart=on-failure
+RestartSec=30
+
+# The config file holds your Daikin credentials and the state file holds the
+# HomeKit setup code, so keep both readable only by this service's user.
+UMask=0077
+
+# HomeKit needs mDNS on the LAN, so no network namespacing here.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

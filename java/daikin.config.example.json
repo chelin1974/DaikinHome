@@ -1,0 +1,14 @@
+{
+  "_comment": "Copy to daikin.config.json and fill in your credentials. See the README for where to find them in the Daikin One app.",
+
+  "apiKey": "YOUR_API_KEY",
+  "email": "you@example.com",
+  "integratorToken": "YOUR_INTEGRATOR_TOKEN",
+
+  "pollIntervalSeconds": 180,
+  "showIndoorHumidity": true,
+  "showOutdoorTemperatureSensor": true,
+
+  "bridgeName": "Daikin One",
+  "port": 51826
+}
