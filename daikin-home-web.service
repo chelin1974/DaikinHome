@@ -1,0 +1,42 @@
+# systemd unit for the Spring Boot flavour of the Daikin One HomeKit bridge.
+#
+#   sudo cp daikin-home-web.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now daikin-home-web
+#   journalctl -u daikin-home-web -f      # the setup code is printed at startup
+#
+# Adjust User, WorkingDirectory and the jar path to match your install. For the plain
+# bridge with no HTTP API, use daikin-home.service instead.
+
+[Unit]
+Description=Daikin One HomeKit bridge (Spring Boot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=daikin
+WorkingDirectory=/opt/daikin-home
+ExecStart=/usr/bin/java -jar /opt/daikin-home/daikin-home-web.jar
+
+# Credentials. Prefer EnvironmentFile over inline Environment= lines: this unit is
+# world-readable, an environment file does not have to be.
+EnvironmentFile=/etc/daikin-home.env
+Environment=SERVER_PORT=8080
+Environment=DAIKIN_STORAGE_PATH=/opt/daikin-home/daikin-home.state.json
+
+Restart=on-failure
+RestartSec=30
+
+# The environment file holds your Daikin credentials and the state file holds the HomeKit
+# setup code, so keep both readable only by this service's user.
+UMask=0077
+
+# HomeKit needs mDNS on the LAN, so no network namespacing here.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

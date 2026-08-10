@@ -2,48 +2,36 @@
 
 Puts a Daikin One thermostat into Apple Home.
 
-Daikin has not announced native HomeKit or Matter support for the One family, and
-its documentation still points at Daikin's own app and cloud. But Daikin does
-publish a [Cloud Open API](https://daikinone.com/openapi/) covering the **One+**,
-**One Touch** and **One Lite** thermostats, with read *and* write access. Both
-implementations here sit on that API.
-
-No hardware changes, no replacing the thermostat, and the Daikin app keeps
-working exactly as before.
-
-## Two implementations — pick one
-
-They do the same job. Choose by what you want to run and what you can maintain.
-
-### [`java/`](java/README.md) — standalone Java bridge
+Daikin has not announced native HomeKit or Matter support for the One family, and its
+documentation still points at Daikin's own app and cloud. But Daikin does publish a
+[Cloud Open API](https://daikinone.com/openapi/) covering the **One+**, **One Touch** and
+**One Lite** thermostats, with read *and* write access. This project sits on that API and
+speaks the HomeKit Accessory Protocol directly, via
+[HAP-Java](https://github.com/hap-java/HAP-Java) — the library behind
+[openHAB's HomeKit add-on](https://www.openhab.org/addons/bindings/homekit/).
 
 ```
-Daikin One  →  Daikin Open API  →  daikin-home.jar  →  Apple Home / Siri
+Daikin One  →  Daikin Cloud Open API  →  this bridge  →  Apple Home / Siri
 ```
 
-One runnable jar. Speaks the HomeKit Accessory Protocol directly via
-[HAP-Java](https://github.com/hap-java/HAP-Java), the library behind openHAB's HomeKit
-add-on. Needs Java 21 and a machine that stays on. No Node.js, no Homebridge.
+No Homebridge, no Home Assistant, no Node.js. No hardware changes, no replacing the
+thermostat, and the Daikin app keeps working exactly as before.
 
-**Start here if you'd rather read and change Java than TypeScript.**
+## Two ways to run it
 
-### Homebridge plugin (this directory) — TypeScript
+Same bridge, same behaviour. Pick by what you need around it.
 
-```
-Daikin One  →  Daikin Open API  →  Homebridge  →  Apple Home / Siri
-```
+| | **CLI** (`cli/`) | **Spring Boot service** (`web/`) |
+| --- | --- | --- |
+| Jar | `cli/target/daikin-home.jar` (~9 MB) | `web/target/daikin-home-web.jar` (~32 MB) |
+| Config | a JSON file | `application.yml`, env vars, CLI args |
+| HomeKit | yes | yes |
+| REST API | — | yes |
+| Health checks / metrics | — | `/actuator/health` |
+| Use it when | you just want the thermostat in Home | you want it reachable from your own automations or monitoring |
 
-A conventional Homebridge plugin, with a config form in the Homebridge UI. Worth it if you
-already run Homebridge, or want to sit alongside other plugins. On Homebridge 2.x it can
-also be exposed over Matter.
-
-It has two extras the Java bridge doesn't: an outdoor *humidity* sensor, and experimental
-schedule/fan switches.
-
-The rest of this file documents the Homebridge plugin. For the Java bridge, see
-**[java/README.md](java/README.md)**.
-
----
+Both build from the same `core/` module, so a fix in the Daikin client or the HomeKit
+mapping applies to both.
 
 ## What shows up in Home
 
@@ -55,84 +43,83 @@ The rest of this file documents the Homebridge plugin. For the Java bridge, see
 | Heating / Cooling / Idle status | `equipmentStatus` |
 | Indoor humidity | `humIndoor` |
 | Outdoor temperature sensor *(optional)* | `tempOutdoor` |
-| Outdoor humidity sensor *(optional, off by default)* | `humOutdoor` |
-| Schedule switch *(optional, experimental)* | `scheduleEnabled` |
-| Fan circulate switch *(optional, experimental)* | `fanCirculate` |
 
-Everything works with Siri and with Home automations. On Homebridge 2.x you can
-also expose the bridge over Matter, so the thermostat reaches Home without the
-HomeKit-only pairing path.
+Everything works with Siri and with Home automations.
+
+## Requirements
+
+- **Java 21 or newer.**
+- **A machine that stays on**, on the same LAN as your Home hub — a Raspberry Pi, a NAS, a
+  spare Mac. HomeKit finds the bridge over mDNS, so it has to be on the same network segment
+  as your Apple TV or HomePod. Don't put it behind Docker's default bridge network unless
+  you use `--network host`.
+- Remote access (away from home) needs a Home Hub, exactly as with any HomeKit accessory.
 
 ## Getting your Daikin credentials
 
-You need three things: an **API key**, the **email address** on your Daikin One
-account, and an **integrator token**. All three come from the Daikin One Home app
-(the same app is branded Amana or Goodman on those systems, and Daikin's own docs
-call it the "SkyportHome" app — the menus are identical).
+You need three things: an **API key**, the **email address** on your Daikin One account, and
+an **integrator token**. All three come from the Daikin One Home app (the same app is branded
+Amana or Goodman on those systems, and Daikin's own docs call it the "SkyportHome" app — the
+menus are identical).
 
-**1. Request the integrator token.** In the app: **Daikin One Care → home
-integration → get integration token**. You have to accept the Integration Token
-Terms and re-enter your account password. The token is tied to the account that
-*owns* the thermostat — if someone else in the household owns it, the token has to
-be generated on their account.
+**1. Request the integrator token.** In the app: **Daikin One Care → home integration → get
+integration token**. You have to accept the Integration Token Terms and re-enter your account
+password. The token is tied to the account that *owns* the thermostat — if someone else in
+the household owns it, the token has to be generated on their account.
 
 **2. Enable the developer menu**, which is where the API key lives:
 
-- **iOS** — open the system **Settings** app, scroll to the Daikin One app, and
-  switch on **developer menu**.
-- **Android** — in the app, go to **Daikin One Care → home integration** and tap
-  the page description **five times**.
+- **iOS** — open the system **Settings** app, scroll to the Daikin One app, and switch on
+  **developer menu**.
+- **Android** — in the app, go to **Daikin One Care → home integration** and tap the page
+  description **five times**.
 
-**3. Get the API key.** Back in the app: **Daikin One Care → home integration →
-developer**. Accept the Daikin B2B Terms and the Open API License Terms, and the
-API key is shown there.
+**3. Get the API key.** Back in the app: **Daikin One Care → home integration → developer**.
+Accept the Daikin B2B Terms and the Open API License Terms, and the API key is shown there.
 
-Keep both the API key and the integrator token secret — together they grant full
-control of your HVAC system.
+Keep both the API key and the integrator token secret — together they grant full control of
+your HVAC system.
 
-### Check them before touching Homebridge
-
-The plugin ships a probe tool that authenticates, lists your thermostats and
-dumps the raw JSON each one returns:
+## Build
 
 ```bash
-npx daikin-one-probe --api-key YOUR_KEY --email you@example.com --token YOUR_TOKEN
+mvn package
 ```
 
-It also reads `DAIKIN_API_KEY` / `DAIKIN_EMAIL` / `DAIKIN_INTEGRATOR_TOKEN` from
-the environment, or `--config path/to/config.json` (either a bare credentials file
-or a Homebridge `config.json` containing a `DaikinOne` platform block).
-
-That JSON dump is worth keeping. Daikin's payload varies by model and firmware,
-and it is the fastest way to tell "the plugin has a bug" apart from "your
-thermostat doesn't report that field".
-
-## Install
+Produces both jars. Check your credentials before going anywhere near HomeKit:
 
 ```bash
-npm install -g homebridge-daikin-one
+cp daikin.config.example.json daikin.config.json
+$EDITOR daikin.config.json
+java -jar cli/target/daikin-home.jar --config daikin.config.json --probe
 ```
 
-Then add the platform in Homebridge (the Homebridge UI renders a form for this):
+That authenticates, lists your thermostats, and dumps the raw JSON each one returns. Keep
+that dump — Daikin's payload varies by model and firmware, and it's the fastest way to tell
+"the bridge has a bug" apart from "your thermostat doesn't report that field".
 
-```json
-{
-  "platforms": [
-    {
-      "platform": "DaikinOne",
-      "name": "Daikin One",
-      "apiKey": "YOUR_API_KEY",
-      "email": "you@example.com",
-      "integratorToken": "YOUR_INTEGRATOR_TOKEN"
-    }
-  ]
-}
+## Run: CLI
+
+```bash
+java -jar cli/target/daikin-home.jar --config daikin.config.json
 ```
 
-Restart Homebridge. Every thermostat on the account is discovered automatically —
-there is nothing to list by hand.
+It prints a setup code at startup:
 
-### Options
+```
+  +------------------------------------------+
+  |  Add the bridge in the Home app using     |
+  |  setup code:  379-96-555                 |
+  +------------------------------------------+
+```
+
+In the Home app: **Add Accessory → More options… → pick the bridge → enter that code**. The
+thermostat and its outdoor sensor arrive together.
+
+`daikin-home.service` is a ready-made systemd unit — copy it to `/etc/systemd/system/`,
+adjust the paths, and `systemctl enable --now daikin-home`.
+
+### CLI configuration
 
 | Setting | Default | Notes |
 | --- | --- | --- |
@@ -140,85 +127,170 @@ there is nothing to list by hand.
 | `pollIntervalSeconds` | `180` | Values below 180 are raised back to 180 (see below). |
 | `showIndoorHumidity` | `true` | Adds humidity to the thermostat tile. |
 | `showOutdoorTemperatureSensor` | `true` | Separate sensor accessory. |
-| `showOutdoorHumiditySensor` | `false` | Separate sensor accessory. |
-| `experimentalScheduleSwitch` | `false` | Switch for `scheduleEnabled`. |
-| `experimentalFanSwitch` | `false` | Switch for `fanCirculate`. |
 | `requestTimeoutSeconds` | `20` | Per-request timeout. |
+| `bridgeName` | `Daikin One` | Shown while pairing. |
+| `port` | `51826` | HomeKit listen port. |
+| `storagePath` | next to the config file | Pairing state — see below. |
 | `baseUrl` | Daikin's endpoint | Override only if Daikin moves the API. |
-| `debug` | `false` | Logs API activity at info level. |
+
+## Run: Spring Boot service
+
+```bash
+DAIKIN_API_KEY=... DAIKIN_EMAIL=you@example.com DAIKIN_INTEGRATOR_TOKEN=... \
+  java -jar web/target/daikin-home-web.jar
+```
+
+Everything the CLI does, plus an HTTP API on port 8080. Configuration comes from
+`application.yml`, environment variables, or command-line arguments — Spring's usual
+precedence — under the `daikin.*` prefix:
+
+```yaml
+daikin:
+  api-key: ...
+  email: you@example.com
+  integrator-token: ...
+  poll-interval-seconds: 180
+  bridge-name: Daikin One
+  homekit-port: 51826          # not server.port — that's the HTTP port
+  storage-path: daikin-home.state.json
+server:
+  port: 8080
+```
+
+`daikin-home-web.service` is the matching systemd unit.
+
+### REST API
+
+| Method | Path | Does |
+| --- | --- | --- |
+| `GET` | `/api/thermostats` | Every thermostat with its last polled state |
+| `GET` | `/api/thermostats/{id}` | One thermostat |
+| `PUT` | `/api/thermostats/{id}` | Change mode and/or setpoints |
+| `POST` | `/api/thermostats/{id}/refresh` | Force a read instead of waiting for the next poll |
+| `GET` | `/api/bridge` | HomeKit status: running, paired, setup code |
+| `GET` | `/actuator/health` | Health, including the bridge |
+
+Modes are strings, not Daikin's integers: `off`, `heat`, `cool`, `auto`, `emergencyHeat`.
+
+```bash
+curl -X PUT localhost:8080/api/thermostats/{id} \
+  -H 'Content-Type: application/json' \
+  -d '{"mode":"heat","heatSetpoint":21.5}'
+```
+
+Every field of the body is optional. The response is the thermostat's state **after** the
+change, which may not be what you asked for — setpoints are clamped into the thermostat's own
+range and kept apart by its minimum separation. Ask for a cool setpoint of 99 and you will
+get back 32.2.
+
+Failures are [RFC 7807 problem details](https://www.rfc-editor.org/rfc/rfc7807) with honest
+status codes: `400` for a bad request, `404` for an unknown thermostat, `502` when the Daikin
+cloud rejects *us* (including bad credentials — that is not the caller's fault, so it is not
+a 401), `504` when the cloud is unreachable, and `429` passed through when Daikin rate limits
+the integration.
+
+The service starts even when Daikin is unreachable. It comes up, reports `DOWN` on
+`/actuator/health` with the reason, and retries in the background — a service you cannot
+reach because its dependency is down is a service you cannot diagnose. Bad credentials are
+the exception: they will never fix themselves, so the retry loop stops and health says
+`retrying: false`.
+
+## The state file
+
+`daikin-home.state.json` holds the bridge's HomeKit identity and every paired controller's
+key. **Back it up, and don't delete it.** Losing it means iOS finds a stranger where its
+bridge used to be, and every accessory goes "No Response" until you remove and re-add the
+bridge. It also contains the setup code in plain text, so it's written owner-only — treat it
+like a password file.
 
 ## How it behaves
 
-**Polling is slow, on purpose.** Daikin documents a floor of one request per
-thermostat every three minutes and rate limits integrations that exceed it. The
-plugin enforces that floor regardless of what the config asks for. The practical
-consequence: a change made *at the wall unit* can take up to one polling interval
-to appear in the Home app.
+**Polling is slow, on purpose.** Daikin documents a floor of one request per thermostat every
+three minutes and rate limits integrations that exceed it. The bridge enforces that floor
+regardless of what the config asks for. The practical consequence: a change made *at the wall
+unit* can take up to one polling interval to appear in the Home app. `POST /refresh` is the
+escape hatch.
 
-**Changes from Home are immediate.** They are sent right away and the Home app
-shows the new value instantly rather than snapping back — the plugin serves an
-optimistic view until the cloud confirms (Daikin needs ~15 seconds), then re-reads
-the thermostat. If the write is rejected, the log says why and the tile reverts to
-the thermostat's real state.
+**Changes from Home are immediate.** They are sent right away and the Home app shows the new
+value instantly rather than snapping back — the bridge serves an optimistic view until the
+cloud confirms (Daikin needs ~15 seconds), then re-reads the thermostat. If the write is
+rejected, the log says why and the tile reverts to the thermostat's real state.
 
-**Writes are batched.** Changing the mode and then the temperature is one API
-call, not two — HomeKit fires several characteristic writes for one gesture.
+**Writes are batched.** Changing the mode and then the temperature is one API call, not two —
+HomeKit fires several characteristic writes for one gesture.
 
-**Setpoints are kept legal.** The thermostat requires the heat setpoint to sit
-below the cool setpoint by at least its `setpointDelta`, with both inside
-`setpointMinimum`/`setpointMaximum`. Drag one threshold into the other in Home and
-the plugin moves the *other* one out of the way rather than sending a request the
-thermostat would reject.
+**Setpoints are kept legal.** The thermostat requires the heat setpoint to sit below the cool
+setpoint by at least its `setpointDelta`, with both inside
+`setpointMinimum`/`setpointMaximum`. Drag one threshold into the other in Home and the bridge
+moves the *other* one out of the way rather than sending a request the thermostat would
+reject.
 
-**Emergency heat is preserved.** HomeKit has no emergency-heat mode, so a system
-in em-heat reads as *Heat*. Re-selecting Heat in the Home app will not silently
-downgrade it; picking any other mode leaves em-heat as you'd expect.
+**Emergency heat is preserved.** HomeKit has no emergency-heat mode, so a system in em-heat
+reads as *Heat*. Re-selecting Heat in the Home app will not silently downgrade it; picking any
+other mode leaves em-heat as you'd expect.
 
 ## Known gaps
 
-- **Emergency heat cannot be turned on** from Home — only preserved. HomeKit has
-  no matching mode.
-- **Fan-only shows as Off.** When `equipmentStatus` is fan-only, HomeKit's current
-  state has nowhere to put it. Overcool-to-dehumidify does show as Cooling,
-  because the compressor genuinely is cooling.
-- **The schedule and fan switches are experimental.** They write `scheduleEnabled`
-  and `fanCirculate` alongside the setpoints. That matches the documented field
-  names, but it is not verified against every firmware, which is why both default
-  to off. If a switch snaps back, the Homebridge log will have the API's
-  rejection — please open an issue with it.
-- **No air quality, zoning, or humidifier control.** The One+ reports more than
-  this plugin surfaces. Run the probe tool; if your thermostat reports something
-  useful, it's a small addition.
+- **Emergency heat cannot be turned on** from Home — only preserved. HomeKit has no matching
+  mode. The REST API accepts `emergencyHeat` if you want it.
+- **Fan-only shows as Off.** When `equipmentStatus` is fan-only, HomeKit's current state has
+  nowhere to put it. Overcool-to-dehumidify does show as Cooling, because the compressor
+  genuinely is cooling.
+- **No schedule or fan control.** The Daikin API exposes `scheduleEnabled` and `fanCirculate`,
+  but the write behaviour is not verified, so this bridge does not touch them.
+- **No air quality, zoning, or humidifier control.** The One+ reports more than this bridge
+  surfaces. Run `--probe`; if your thermostat reports something useful, it's a small addition.
+- **The REST API has no authentication.** It is meant for a trusted LAN. Do not expose port
+  8080 to the internet — anyone who reaches it controls your heating.
+- **HAP-Java's last release on Maven Central is 2.0.7 (March 2023).** It is stable and in
+  production use via openHAB, but it is not moving quickly. Worth knowing before you build on
+  it.
 
 ## Troubleshooting
 
-**"Daikin rejected the credentials"** — the API key, email or integrator token is
-wrong, or the token was generated on an account that doesn't own the thermostat.
-Verify with `npx daikin-one-probe` first.
+**"Daikin API rejected the credentials"** — the API key, email or integrator token is wrong,
+or the token was generated on an account that doesn't own the thermostat. Verify with
+`--probe` first.
 
 **No thermostats found** — same cause, almost always the account-ownership one.
 
-**"Daikin API rate limited this integration"** — something is polling too fast.
-Check whether another integration is using the same API key; the limit applies to
-the key, not to this plugin.
+**The bridge doesn't appear in the Home app** — mDNS isn't reaching your phone. Check the
+bridge is on the same network segment (not a guest VLAN), and if it's in Docker, that it's
+using host networking.
 
-**A value reads 0 or is missing** — run the probe tool and look for the field in
-the raw JSON. If Daikin doesn't report it for your model, the plugin can't invent
-it.
+**"Daikin API rate limited this integration"** — something is polling too fast. Check whether
+another integration is using the same API key; the limit applies to the key, not to this
+bridge.
+
+**Accessories show "No Response" after a restart** — the state file was lost or a different
+one is being used. Check `storagePath`.
 
 ## Development
 
 ```bash
-npm install
-npm run build     # compile to dist/
-npm test          # unit + end-to-end tests
-npm run lint      # type-check only
+mvn test        # 92 tests across the three modules
+mvn package     # both runnable jars
 ```
 
-The test suite includes an end-to-end test that runs the real platform against a
-local HTTP server standing in for the Daikin cloud, with real HAP service objects
-— so accessory wiring, write batching and setpoint clamping are all covered
-without touching your thermostat.
+| Module | Contains |
+| --- | --- |
+| `core` | The Daikin client, the HomeKit mapping, the bridge. No Spring, no CLI. |
+| `cli` | JSON config, `main`, the probe tool. |
+| `web` | Spring Boot: REST controllers, config properties, health indicator. |
+
+| Path | What it does |
+| --- | --- |
+| `core/…/Mapping.java` | Pure Daikin ↔ HomeKit translation. No network, no state — **start here** |
+| `core/…/daikin/DaikinOneClient` | HTTP client: tokens, retries, pacing, listing normalisation |
+| `core/…/homekit/DaikinThermostat` | The HomeKit accessory: reads, debounced writes, subscriptions |
+| `core/…/homekit/FileAuthInfo` | Pairing state on disk |
+| `core/…/DaikinHomeBridge` | Startup, discovery, polling. Implements `ThermostatGateway` |
+
+The core tests run against a real local HTTP server standing in for the Daikin cloud
+(`FakeDaikinCloud`), so header handling, status codes, URL encoding and JSON parsing are
+genuinely exercised rather than mocked. The web tests drive the controllers through MockMvc
+against an in-memory `ThermostatGateway`, which still runs the real clamping logic — so they
+test behaviour, not a stub that agrees with everything.
 
 ## License
 

@@ -1,0 +1,38 @@
+daikin:
+  # Credentials come from the Daikin One app. See the README for where to find them.
+  # Environment variables work too: DAIKIN_API_KEY, DAIKIN_EMAIL, DAIKIN_INTEGRATOR_TOKEN.
+  api-key: ${DAIKIN_API_KEY:}
+  email: ${DAIKIN_EMAIL:}
+  integrator-token: ${DAIKIN_INTEGRATOR_TOKEN:}
+
+  # Daikin rate limits integrations that poll faster than this. Lower values are ignored.
+  poll-interval-seconds: 180
+  request-timeout-seconds: 20
+
+  show-indoor-humidity: true
+  show-outdoor-temperature-sensor: true
+
+  bridge-name: Daikin One
+  # The HomeKit accessory port, not the HTTP port below.
+  homekit-port: 51826
+  # HomeKit pairing state. Back this file up; losing it un-pairs every controller.
+  storage-path: daikin-home.state.json
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    io.github.chelin1974.daikinhome: INFO
+    # HAP-Java logs every HomeKit frame at INFO, which buries everything else.
+    io.github.hapjava: WARN
+    io.netty: WARN

@@ -1,0 +1,162 @@
+package io.github.chelin1974.daikinhome.web;
+
+import io.github.chelin1974.daikinhome.BridgeSettings;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * The {@code daikin.*} block of {@code application.yml}.
+ *
+ * <p>Spring binds these from YAML, environment variables ({@code DAIKIN_API_KEY}),
+ * command-line arguments or anything else on the property source list — which is the main
+ * reason to run the service flavour in a container.
+ *
+ * <p>Validation and clamping are deliberately not done here. They live in
+ * {@link BridgeSettings}, so the CLI and this service reject the same mistakes with the same
+ * message.
+ */
+@ConfigurationProperties(prefix = "daikin")
+public class DaikinProperties {
+
+  /** Integrator API key, from the Daikin One app's developer menu. */
+  private String apiKey;
+
+  /** Email address of the Daikin One account. */
+  private String email;
+
+  /** Integrator token, generated in the Daikin One app. */
+  private String integratorToken;
+
+  /** Override only if Daikin moves the Open API endpoint. */
+  private String baseUrl;
+
+  /** Seconds between polls. Values below 180 are raised back to 180. */
+  private Integer pollIntervalSeconds;
+
+  /** Per-request timeout in seconds. */
+  private Integer requestTimeoutSeconds;
+
+  /** Show indoor humidity on the HomeKit thermostat tile. */
+  private Boolean showIndoorHumidity;
+
+  /** Publish a separate outdoor temperature sensor accessory. */
+  private Boolean showOutdoorTemperatureSensor;
+
+  /** Name shown while pairing in the Home app. */
+  private String bridgeName;
+
+  /**
+   * Port the HomeKit accessory server listens on.
+   *
+   * <p>Not the HTTP port — that is {@code server.port}. Naming it {@code homekit-port} keeps
+   * the two from being confused in a config file.
+   */
+  private Integer homekitPort;
+
+  /** Where HomeKit pairing state is stored. Back this file up. */
+  private String storagePath;
+
+  /** Applies defaults, clamping and validation. */
+  public BridgeSettings toBridgeSettings() {
+    return BridgeSettings.builder()
+        .apiKey(apiKey)
+        .email(email)
+        .integratorToken(integratorToken)
+        .baseUrl(baseUrl)
+        .pollIntervalSeconds(pollIntervalSeconds)
+        .requestTimeoutSeconds(requestTimeoutSeconds)
+        .showIndoorHumidity(showIndoorHumidity)
+        .showOutdoorTemperatureSensor(showOutdoorTemperatureSensor)
+        .bridgeName(bridgeName)
+        .port(homekitPort)
+        .storagePath(storagePath)
+        .build();
+  }
+
+  public String getApiKey() {
+    return apiKey;
+  }
+
+  public void setApiKey(String apiKey) {
+    this.apiKey = apiKey;
+  }
+
+  public String getEmail() {
+    return email;
+  }
+
+  public void setEmail(String email) {
+    this.email = email;
+  }
+
+  public String getIntegratorToken() {
+    return integratorToken;
+  }
+
+  public void setIntegratorToken(String integratorToken) {
+    this.integratorToken = integratorToken;
+  }
+
+  public String getBaseUrl() {
+    return baseUrl;
+  }
+
+  public void setBaseUrl(String baseUrl) {
+    this.baseUrl = baseUrl;
+  }
+
+  public Integer getPollIntervalSeconds() {
+    return pollIntervalSeconds;
+  }
+
+  public void setPollIntervalSeconds(Integer pollIntervalSeconds) {
+    this.pollIntervalSeconds = pollIntervalSeconds;
+  }
+
+  public Integer getRequestTimeoutSeconds() {
+    return requestTimeoutSeconds;
+  }
+
+  public void setRequestTimeoutSeconds(Integer requestTimeoutSeconds) {
+    this.requestTimeoutSeconds = requestTimeoutSeconds;
+  }
+
+  public Boolean getShowIndoorHumidity() {
+    return showIndoorHumidity;
+  }
+
+  public void setShowIndoorHumidity(Boolean showIndoorHumidity) {
+    this.showIndoorHumidity = showIndoorHumidity;
+  }
+
+  public Boolean getShowOutdoorTemperatureSensor() {
+    return showOutdoorTemperatureSensor;
+  }
+
+  public void setShowOutdoorTemperatureSensor(Boolean showOutdoorTemperatureSensor) {
+    this.showOutdoorTemperatureSensor = showOutdoorTemperatureSensor;
+  }
+
+  public String getBridgeName() {
+    return bridgeName;
+  }
+
+  public void setBridgeName(String bridgeName) {
+    this.bridgeName = bridgeName;
+  }
+
+  public Integer getHomekitPort() {
+    return homekitPort;
+  }
+
+  public void setHomekitPort(Integer homekitPort) {
+    this.homekitPort = homekitPort;
+  }
+
+  public String getStoragePath() {
+    return storagePath;
+  }
+
+  public void setStoragePath(String storagePath) {
+    this.storagePath = storagePath;
+  }
+}
