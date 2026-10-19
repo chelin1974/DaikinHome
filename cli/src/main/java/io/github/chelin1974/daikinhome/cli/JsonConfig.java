@@ -11,7 +11,17 @@ import java.nio.file.Path;
 /**
  * Reads {@link BridgeSettings} from a JSON file.
  *
- * <p>Example {@code daikin.config.json}:
+ * <p>Example {@code daikin.config.json} for an account on the SkyportHome app:
+ *
+ * <pre>{@code
+ * {
+ *   "backend": "skyport",
+ *   "email": "you@example.com",
+ *   "password": "..."
+ * }
+ * }</pre>
+ *
+ * <p>And for the Open API:
  *
  * <pre>{@code
  * {
@@ -30,6 +40,8 @@ public final class JsonConfig {
   /** Raw JSON shape, before defaults, clamping and validation. */
   @JsonIgnoreProperties(ignoreUnknown = true)
   static final class Raw {
+    public String backend;
+    public String password;
     public String apiKey;
     public String email;
     public String integratorToken;
@@ -65,6 +77,8 @@ public final class JsonConfig {
   /** Exposed for tests; {@code storageDirectory} is where the state file lands. */
   static BridgeSettings toSettings(Raw raw, Path storageDirectory) {
     return BridgeSettings.builder()
+        .backend(raw.backend)
+        .password(raw.password)
         .apiKey(raw.apiKey)
         .email(raw.email)
         .integratorToken(raw.integratorToken)

@@ -2,15 +2,16 @@ package io.github.chelin1974.daikinhome.cli;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.chelin1974.daikinhome.BridgeSettings;
+import io.github.chelin1974.daikinhome.DaikinClients;
+import io.github.chelin1974.daikinhome.daikin.DaikinCloud;
 import io.github.chelin1974.daikinhome.daikin.DaikinDeviceSummary;
 import io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinAuthException;
-import io.github.chelin1974.daikinhome.daikin.DaikinOneClient;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Connectivity and discovery check for the Daikin One Open API.
+ * Connectivity and discovery check for whichever Daikin cloud the settings select.
  *
  * <p>Run this before debugging anything in the bridge: it authenticates, lists the
  * thermostats on the account, and dumps the raw JSON each one returns.
@@ -31,16 +32,16 @@ public final class ProbeTool {
 
   /** Returns a process exit code. */
   public static int run(BridgeSettings settings) {
-    DaikinOneClient client =
-        DaikinOneClient.builder()
-            .apiKey(settings.apiKey())
-            .email(settings.email())
-            .integratorToken(settings.integratorToken())
-            .baseUrl(settings.baseUrl())
-            .timeout(settings.requestTimeout())
-            .build();
+    DaikinCloud client = DaikinClients.create(settings);
 
-    System.err.println("Authenticating as " + settings.email() + " against " + client.baseUrl() + "...");
+    System.err.println(
+        "Authenticating as "
+            + settings.email()
+            + " against "
+            + client.baseUrl()
+            + " ("
+            + settings.backend()
+            + " backend)...");
 
     List<DaikinDeviceSummary> devices;
     try {
@@ -57,9 +58,7 @@ public final class ProbeTool {
 
     if (devices.isEmpty()) {
       System.err.println();
-      System.err.println(
-          "No thermostats returned. The integrator token must belong to the account "
-              + "that owns the thermostat.");
+      System.err.println("No thermostats returned. " + DaikinClients.noDevicesHint(settings));
       return 1;
     }
 

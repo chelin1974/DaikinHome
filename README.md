@@ -17,6 +17,38 @@ Daikin One  →  Daikin Cloud Open API  →  this bridge  →  Apple Home / Siri
 No Homebridge, no Home Assistant, no Node.js. No hardware changes, no replacing the
 thermostat, and the Daikin app keeps working exactly as before.
 
+## Which backend: Open API or SkyportHome
+
+In 2026 Daikin renamed the Daikin One Home app to **SkyportHome** and started moving accounts,
+one at a time, to a new cloud (`api.skyportcloud.com`). A moved account can no longer log in
+to the old endpoints: with the right password it gets `400 {"message":"NotAuthorizedException"}`,
+which looks exactly like a wrong password. Homebridge's `homebridge-daikin-oneplus` fails this
+way on moved accounts.
+
+The bridge supports both clouds. Pick with `"backend"` in the config:
+
+| `backend` | Logs in with | Use it when |
+| --- | --- | --- |
+| `skyport` | the email and password you use in the SkyportHome app | your account is on SkyportHome |
+| `openapi` *(default)* | API key + email + integrator token | the documented Open API works for your account |
+
+**Not sure which you're on?** Run this (the leading space keeps it out of your shell history):
+
+```bash
+ curl -s -X POST https://api.skyportcloud.com/users/auth/login \
+   -H "Content-Type: application/json" \
+   -d '{"email":"you@example.com","password":"YOUR_PASSWORD"}'
+```
+
+A reply containing `AccessToken` means your account is on SkyportHome: use `skyport`.
+`Incorrect e-mail or password.` means a typo; anything else, try `openapi`.
+
+The `skyport` backend uses an API that Daikin has not published. Its endpoints and payload
+format come from the SkyportHome web client, as mapped in
+[apetrycki/daikinskyport#156](https://github.com/apetrycki/daikinskyport/issues/156). It can
+change without notice. See [SkyportHome backend](#skyporthome-backend) for what it does and
+doesn't cover.
+
 ## Two ways to run it
 
 Same bridge, same behaviour. Pick by what you need around it.
@@ -57,7 +89,10 @@ Everything works with Siri and with Home automations.
 
 ## Getting your Daikin credentials
 
-You need three things: an **API key**, the **email address** on your Daikin One account, and
+**`skyport` backend:** nothing to fetch. Use the email and password you sign in to the
+SkyportHome app with. Start from `daikin.config.skyport.example.json`.
+
+**`openapi` backend:** you need three things: an **API key**, the **email address** on your Daikin One account, and
 an **integrator token**. All three come from the Daikin One Home app (the same app is branded
 Amana or Goodman on those systems, and Daikin's own docs call it the "SkyportHome" app — the
 menus are identical).
@@ -123,7 +158,9 @@ adjust the paths, and `systemctl enable --now daikin-home`.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| `apiKey`, `email`, `integratorToken` | — | Required. |
+| `backend` | `openapi` | `skyport` or `openapi`. A `password` with no `apiKey` selects `skyport`. |
+| `email`, `password` | — | Required for `skyport`. The SkyportHome app login. |
+| `apiKey`, `email`, `integratorToken` | — | Required for `openapi`. |
 | `pollIntervalSeconds` | `180` | Values below 180 are raised back to 180 (see below). |
 | `showIndoorHumidity` | `true` | Adds humidity to the thermostat tile. |
 | `showOutdoorTemperatureSensor` | `true` | Separate sensor accessory. |
@@ -136,6 +173,11 @@ adjust the paths, and `systemctl enable --now daikin-home`.
 ## Run: Spring Boot service
 
 ```bash
+# SkyportHome account
+DAIKIN_BACKEND=skyport DAIKIN_EMAIL=you@example.com DAIKIN_PASSWORD=... \
+  java -jar web/target/daikin-home-web.jar
+
+# Open API
 DAIKIN_API_KEY=... DAIKIN_EMAIL=you@example.com DAIKIN_INTEGRATOR_TOKEN=... \
   java -jar web/target/daikin-home-web.jar
 ```
@@ -146,9 +188,11 @@ precedence — under the `daikin.*` prefix:
 
 ```yaml
 daikin:
-  api-key: ...
+  backend: skyport             # or openapi
   email: you@example.com
-  integrator-token: ...
+  password: ...                # skyport
+  api-key: ...                 # openapi
+  integrator-token: ...        # openapi
   poll-interval-seconds: 180
   bridge-name: Daikin One
   homekit-port: 51826          # not server.port — that's the HTTP port
@@ -229,6 +273,35 @@ reject.
 reads as *Heat*. Re-selecting Heat in the Home app will not silently downgrade it; picking any
 other mode leaves em-heat as you'd expect.
 
+## SkyportHome backend
+
+What it does: logs in with your app email and password (logging in again when the hour-long
+session ends), lists thermostats, reads each one from `GET /devices/{id}/live`, and writes
+mode and setpoints with `POST /cmd/{id}/msp`. The same pacing, retry and rate-limit handling
+as the Open API client applies, and a rejected password is never retried, so a typo cannot
+lock the account.
+
+How it translates:
+
+- **Temperatures** arrive in Daikin's raw "VUT" units, °C = 0.5 × raw − 40, so the thermostat
+  works in half degrees. Raw 254 and 255 mean a shorted or disconnected sensor and are ignored.
+- **Equipment status** maps idle and waiting to *Idle*, heating to *Heating*, and cooling and
+  free cooling to *Cooling*. An error code falls back to the selected mode.
+- **Humidity** of 0 is treated as "no sensor", since real indoor air is never 0 %.
+- **Setpoint limits** use the One family's 50–90 °F range, with a 1 °C minimum gap between
+  heat and cool. If rounding to half degrees would close that gap, the cool setpoint moves up.
+
+Gaps specific to this backend:
+
+- **Outdoor temperature:** the field name in the live payload isn't confirmed yet. The bridge
+  checks the likely names; if none is present, it skips the outdoor sensor rather than showing
+  0°. If your system has one, run `--probe` and look in the `skyport` block for it.
+- **Emergency heat** is sent as plain heat, because the command's em-heat value is unknown.
+- **Two-factor authentication** isn't supported. If it's on for the account, login fails with
+  a message saying so.
+- **Your password sits in the config file in plain text.** Keep `daikin.config.json`
+  owner-only (`chmod 600`); it's already in `.gitignore`.
+
 ## Known gaps
 
 - **Emergency heat cannot be turned on** from Home — only preserved. HomeKit has no matching
@@ -247,6 +320,15 @@ other mode leaves em-heat as you'd expect.
   it.
 
 ## Troubleshooting
+
+**`400 {"message":"NotAuthorizedException"}` with the right password** — your account has
+moved to SkyportHome. Switch to `"backend": "skyport"`.
+
+**"the SkyportHome cloud rejected the login"** — wrong email or password for the `skyport`
+backend. Sign out and back in to the SkyportHome app to confirm them.
+
+**Running next to Homebridge on the same machine** — both default to HomeKit port 51826.
+Give this bridge another `port` (the SkyportHome example config uses 51827).
 
 **"Daikin API rejected the credentials"** — the API key, email or integrator token is wrong,
 or the token was generated on an account that doesn't own the thermostat. Verify with
@@ -268,7 +350,7 @@ one is being used. Check `storagePath`.
 ## Development
 
 ```bash
-mvn test        # 92 tests across the three modules
+mvn test        # runs the tests in all three modules
 mvn package     # both runnable jars
 ```
 
@@ -281,13 +363,16 @@ mvn package     # both runnable jars
 | Path | What it does |
 | --- | --- |
 | `core/…/Mapping.java` | Pure Daikin ↔ HomeKit translation. No network, no state — **start here** |
-| `core/…/daikin/DaikinOneClient` | HTTP client: tokens, retries, pacing, listing normalisation |
+| `core/…/daikin/DaikinCloud` | The interface both backends implement |
+| `core/…/daikin/DaikinOneClient` | Open API client: tokens, retries, pacing, listing normalisation |
+| `core/…/daikin/SkyportCloudClient` | SkyportHome client: email/password session, same pacing and retries |
+| `core/…/daikin/SkyportPayload` | Pure Skyport ↔ Open API translation (VUT units, status codes) |
 | `core/…/homekit/DaikinThermostat` | The HomeKit accessory: reads, debounced writes, subscriptions |
 | `core/…/homekit/FileAuthInfo` | Pairing state on disk |
 | `core/…/DaikinHomeBridge` | Startup, discovery, polling. Implements `ThermostatGateway` |
 
 The core tests run against a real local HTTP server standing in for the Daikin cloud
-(`FakeDaikinCloud`), so header handling, status codes, URL encoding and JSON parsing are
+(`FakeDaikinCloud`, and `FakeSkyportCloud` for the SkyportHome backend), so header handling, status codes, URL encoding and JSON parsing are
 genuinely exercised rather than mocked. The web tests drive the controllers through MockMvc
 against an in-memory `ThermostatGateway`, which still runs the real clamping logic — so they
 test behaviour, not a stub that agrees with everything.

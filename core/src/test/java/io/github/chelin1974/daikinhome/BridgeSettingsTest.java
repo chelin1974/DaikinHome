@@ -124,4 +124,94 @@ class BridgeSettingsTest {
             .build()
             .storagePath());
   }
+
+  // ------------------------------------------------------------------ backends
+
+  private static BridgeSettings.Builder skyport() {
+    return BridgeSettings.builder().backend("skyport").email("user@example.com").password("pw");
+  }
+
+  @Test
+  @DisplayName("defaults to the Open API, so existing configs keep working")
+  void defaultsToOpenApi() {
+    assertEquals(BridgeSettings.Backend.OPEN_API, credentials().build().backend());
+  }
+
+  @Test
+  @DisplayName("skyport needs only email and password")
+  void skyportCredentials() {
+    BridgeSettings settings = skyport().build();
+
+    assertEquals(BridgeSettings.Backend.SKYPORT, settings.backend());
+    assertEquals("pw", settings.password());
+    assertNull(settings.apiKey());
+    assertNull(settings.integratorToken());
+  }
+
+  @Test
+  @DisplayName("a password without an API key selects skyport")
+  void infersSkyport() {
+    BridgeSettings settings =
+        BridgeSettings.builder().email("user@example.com").password("pw").build();
+    assertEquals(BridgeSettings.Backend.SKYPORT, settings.backend());
+  }
+
+  @Test
+  @DisplayName("an explicit backend wins over inference")
+  void explicitBackendWins() {
+    assertThrows(
+        SettingsException.class,
+        () -> credentials().backend("skyport").build(),
+        "skyport without a password is an error even with Open API credentials present");
+    assertEquals(
+        BridgeSettings.Backend.OPEN_API, credentials().password("pw").backend("openapi").build().backend());
+  }
+
+  @Test
+  @DisplayName("accepts the obvious spellings of each backend")
+  void parsesBackendNames() {
+    for (String name : new String[] {"skyport", "SkyportHome", "SKYPORT", "skyport-cloud"}) {
+      assertEquals(BridgeSettings.Backend.SKYPORT, BridgeSettings.Backend.parse(name), name);
+    }
+    for (String name : new String[] {"openapi", "open-api", "OPEN_API", "integrator"}) {
+      assertEquals(BridgeSettings.Backend.OPEN_API, BridgeSettings.Backend.parse(name), name);
+    }
+  }
+
+  @Test
+  @DisplayName("an unknown backend is named in the error, with the valid choices")
+  void rejectsUnknownBackend() {
+    SettingsException error =
+        assertThrows(SettingsException.class, () -> skyport().backend("homebridge").build());
+    assertTrue(error.getMessage().contains("homebridge"), error.getMessage());
+    assertTrue(error.getMessage().contains("skyport"), error.getMessage());
+  }
+
+  @Test
+  @DisplayName("skyport names its own missing settings, not the Open API's")
+  void skyportMissingSettings() {
+    SettingsException error =
+        assertThrows(SettingsException.class, () -> BridgeSettings.builder().backend("skyport").build());
+
+    assertTrue(error.getMessage().contains("email"), error.getMessage());
+    assertTrue(error.getMessage().contains("password"), error.getMessage());
+    assertFalse(error.getMessage().contains("integratorToken"), error.getMessage());
+  }
+
+  @Test
+  @DisplayName("the password is kept exactly as typed")
+  void passwordNotTrimmed() {
+    assertEquals(" pw ", skyport().password(" pw ").build().password());
+  }
+
+  @Test
+  @DisplayName("toString never includes a credential")
+  void toStringRedacts() {
+    String text = skyport().password("hunter2").build().toString();
+    assertFalse(text.contains("hunter2"), text);
+
+    String openApi = credentials().apiKey("secret-key").integratorToken("secret-token").build().toString();
+    assertFalse(openApi.contains("secret-key"), openApi);
+    assertFalse(openApi.contains("secret-token"), openApi);
+  }
 }

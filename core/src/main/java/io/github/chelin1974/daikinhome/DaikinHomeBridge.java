@@ -1,9 +1,9 @@
 package io.github.chelin1974.daikinhome;
 
+import io.github.chelin1974.daikinhome.daikin.DaikinCloud;
 import io.github.chelin1974.daikinhome.daikin.DaikinDevice;
 import io.github.chelin1974.daikinhome.daikin.DaikinDeviceSummary;
 import io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinAuthException;
-import io.github.chelin1974.daikinhome.daikin.DaikinOneClient;
 import io.github.chelin1974.daikinhome.homekit.DaikinThermostat;
 import io.github.chelin1974.daikinhome.homekit.FileAuthInfo;
 import io.github.chelin1974.daikinhome.homekit.OutdoorTemperatureSensor;
@@ -40,7 +40,7 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
   private static final int FIRST_ACCESSORY_ID = 2;
 
   private final BridgeSettings settings;
-  private final DaikinOneClient client;
+  private final DaikinCloud client;
   private final ScheduledExecutorService scheduler =
       Executors.newScheduledThreadPool(
           2,
@@ -62,23 +62,13 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
   private volatile boolean shuttingDown;
 
   public DaikinHomeBridge(BridgeSettings settings) {
-    this(settings, defaultClient(settings));
+    this(settings, DaikinClients.create(settings));
   }
 
   /** Injects a client, so tests can point the bridge at a local server. */
-  public DaikinHomeBridge(BridgeSettings settings, DaikinOneClient client) {
+  public DaikinHomeBridge(BridgeSettings settings, DaikinCloud client) {
     this.settings = settings;
     this.client = client;
-  }
-
-  private static DaikinOneClient defaultClient(BridgeSettings settings) {
-    return DaikinOneClient.builder()
-        .apiKey(settings.apiKey())
-        .email(settings.email())
-        .integratorToken(settings.integratorToken())
-        .baseUrl(settings.baseUrl())
-        .timeout(settings.requestTimeout())
-        .build();
   }
 
   /**
@@ -92,12 +82,13 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
       return;
     }
 
+    log.info("connecting to {} ({} backend)", client.baseUrl(), settings.backend());
     List<DaikinDeviceSummary> devices = client.getDevices();
 
     if (devices.isEmpty()) {
       log.warn(
-          "the Daikin account has no thermostats the Open API can see. Confirm the "
-              + "integrator token was generated on the account that owns the thermostat.");
+          "the Daikin account has no thermostats this backend can see. {}",
+          DaikinClients.noDevicesHint(settings));
       return;
     }
 
@@ -136,7 +127,7 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
       thermostats.put(summary.id(), thermostat);
       bridge.addAccessory(thermostat);
 
-      if (settings.showOutdoorTemperatureSensor()) {
+      if (settings.showOutdoorTemperatureSensor() && hasOutdoorReading(initial)) {
         OutdoorTemperatureSensor sensor =
             new OutdoorTemperatureSensor(
                 nextId++, summary.name() + " Outdoor", summary.id() + "-outdoor", initial);
@@ -214,7 +205,7 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
     return settings;
   }
 
-  public DaikinOneClient client() {
+  public DaikinCloud client() {
     return client;
   }
 
@@ -300,6 +291,28 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
       }
       refresh(deviceId);
     }
+  }
+
+  /**
+   * Whether an outdoor sensor would show a real value.
+   *
+   * <p>The Open API always reports {@code tempOutdoor}, so its sensor is published even when
+   * the startup read failed. Where the Skyport payload keeps the outdoor temperature is not
+   * yet confirmed, and a sensor stuck at 0° is worse than none, so there it is published only
+   * when the first read found one.
+   */
+  private boolean hasOutdoorReading(DaikinDevice initial) {
+    if (settings.backend() != BridgeSettings.Backend.SKYPORT) {
+      return true;
+    }
+    if (initial.tempOutdoor == null) {
+      log.info(
+          "no outdoor temperature found for \"{}\"; skipping the outdoor sensor. Run --probe"
+              + " and check the skyport block if your system has an outdoor sensor.",
+          initial.name);
+      return false;
+    }
+    return true;
   }
 
   private DaikinThermostat thermostat(String deviceId) {

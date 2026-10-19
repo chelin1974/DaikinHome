@@ -67,6 +67,23 @@ class DaikinPropertiesTest {
   }
 
   @Test
+  @DisplayName("binds the skyport backend from email and password alone")
+  void bindsSkyport() {
+    DaikinProperties properties =
+        bind(
+            Map.of(
+                "daikin.backend", "skyport",
+                "daikin.email", "user@example.com",
+                "daikin.password", "secret"));
+
+    BridgeSettings settings = properties.toBridgeSettings();
+
+    assertThat(settings.backend()).isEqualTo(BridgeSettings.Backend.SKYPORT);
+    assertThat(settings.password()).isEqualTo("secret");
+    assertThat(settings.apiKey()).isNull();
+  }
+
+  @Test
   @DisplayName("defaults the state file to the working directory")
   void defaultsStoragePath() {
     DaikinProperties properties =

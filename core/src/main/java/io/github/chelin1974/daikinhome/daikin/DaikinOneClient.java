@@ -37,7 +37,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>This class is thread-safe.
  */
-public final class DaikinOneClient {
+public final class DaikinOneClient implements DaikinCloud {
 
   private static final Logger log = LoggerFactory.getLogger(DaikinOneClient.class);
   private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -93,11 +93,13 @@ public final class DaikinOneClient {
    * <p>The API groups thermostats by location; some accounts return a flat array instead,
    * so both shapes are accepted.
    */
+  @Override
   public List<DaikinDeviceSummary> getDevices() {
     return normaliseDeviceListing(requestJson("GET", "/v1/devices", null, false));
   }
 
   /** Full state for one thermostat. */
+  @Override
   public DaikinDevice getDevice(String deviceId) {
     JsonNode payload =
         requestJson("GET", "/v1/devices/" + encode(deviceId), null, false);
@@ -118,11 +120,13 @@ public final class DaikinOneClient {
    * validates them as a set (heat must sit below cool by at least {@code setpointDelta}),
    * so callers pass a complete payload rather than a partial patch.
    */
+  @Override
   public void updateDevice(String deviceId, Map<String, Object> update) {
     requestJson("PUT", "/v1/devices/" + encode(deviceId) + "/msp", update, false);
   }
 
   /** Drops the cached token; the next request re-authenticates. */
+  @Override
   public void invalidateToken() {
     synchronized (lock) {
       accessToken = null;
@@ -565,6 +569,7 @@ public final class DaikinOneClient {
   }
 
   /** Exposed so the bridge can log which endpoint it is talking to. */
+  @Override
   public String baseUrl() {
     return baseUrl;
   }

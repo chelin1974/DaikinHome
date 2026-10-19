@@ -1,0 +1,14 @@
+{
+  "_comment": "For accounts on the SkyportHome app. Copy to daikin.config.json and fill in the email and password you sign in to the app with. Keep this file private.",
+
+  "backend": "skyport",
+  "email": "you@example.com",
+  "password": "YOUR_SKYPORTHOME_PASSWORD",
+
+  "pollIntervalSeconds": 180,
+  "showIndoorHumidity": true,
+  "showOutdoorTemperatureSensor": true,
+
+  "bridgeName": "Daikin One",
+  "port": 51827
+}

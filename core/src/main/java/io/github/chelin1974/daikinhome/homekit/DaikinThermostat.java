@@ -6,9 +6,9 @@ import io.github.chelin1974.daikinhome.Mapping.Anchor;
 import io.github.chelin1974.daikinhome.Mapping.Desired;
 import io.github.chelin1974.daikinhome.Mapping.MspUpdate;
 import io.github.chelin1974.daikinhome.Mapping.SetpointLimits;
+import io.github.chelin1974.daikinhome.daikin.DaikinCloud;
 import io.github.chelin1974.daikinhome.daikin.DaikinDevice;
 import io.github.chelin1974.daikinhome.daikin.DaikinDeviceSummary;
-import io.github.chelin1974.daikinhome.daikin.DaikinOneClient;
 import io.github.hapjava.accessories.ThermostatAccessory;
 import io.github.hapjava.characteristics.HomekitCharacteristicChangeCallback;
 import io.github.hapjava.characteristics.impl.humiditysensor.CurrentRelativeHumidityCharacteristic;
@@ -44,7 +44,7 @@ public final class DaikinThermostat implements ThermostatAccessory {
 
   private final int id;
   private final DaikinDeviceSummary summary;
-  private final DaikinOneClient client;
+  private final DaikinCloud client;
   private final ScheduledExecutorService scheduler;
   private final boolean showIndoorHumidity;
 
@@ -87,7 +87,7 @@ public final class DaikinThermostat implements ThermostatAccessory {
       int id,
       DaikinDeviceSummary summary,
       DaikinDevice initialState,
-      DaikinOneClient client,
+      DaikinCloud client,
       ScheduledExecutorService scheduler,
       boolean showIndoorHumidity,
       Runnable requestRefresh) {

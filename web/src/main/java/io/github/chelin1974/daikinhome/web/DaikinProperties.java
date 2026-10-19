@@ -17,6 +17,15 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "daikin")
 public class DaikinProperties {
 
+  /**
+   * {@code skyport} (email and password, for accounts on the SkyportHome app) or
+   * {@code openapi} (API key and integrator token). Inferred when absent.
+   */
+  private String backend;
+
+  /** SkyportHome app password. Used by the {@code skyport} backend only. */
+  private String password;
+
   /** Integrator API key, from the Daikin One app's developer menu. */
   private String apiKey;
 
@@ -58,6 +67,8 @@ public class DaikinProperties {
   /** Applies defaults, clamping and validation. */
   public BridgeSettings toBridgeSettings() {
     return BridgeSettings.builder()
+        .backend(backend)
+        .password(password)
         .apiKey(apiKey)
         .email(email)
         .integratorToken(integratorToken)
@@ -70,6 +81,22 @@ public class DaikinProperties {
         .port(homekitPort)
         .storagePath(storagePath)
         .build();
+  }
+
+  public String getBackend() {
+    return backend;
+  }
+
+  public void setBackend(String backend) {
+    this.backend = backend;
+  }
+
+  public String getPassword() {
+    return password;
+  }
+
+  public void setPassword(String password) {
+    this.password = password;
   }
 
   public String getApiKey() {

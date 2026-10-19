@@ -1,8 +1,13 @@
 daikin:
-  # Credentials come from the Daikin One app. See the README for where to find them.
-  # Environment variables work too: DAIKIN_API_KEY, DAIKIN_EMAIL, DAIKIN_INTEGRATOR_TOKEN.
-  api-key: ${DAIKIN_API_KEY:}
+  # Which cloud to use. "skyport" for accounts on the SkyportHome app (email + password);
+  # "openapi" for the integrator Open API (API key + integrator token). Left blank, a
+  # password without an API key selects skyport. See the README.
+  backend: ${DAIKIN_BACKEND:}
   email: ${DAIKIN_EMAIL:}
+  # skyport backend
+  password: ${DAIKIN_PASSWORD:}
+  # openapi backend
+  api-key: ${DAIKIN_API_KEY:}
   integrator-token: ${DAIKIN_INTEGRATOR_TOKEN:}
 
   # Daikin rate limits integrations that poll faster than this. Lower values are ignored.
