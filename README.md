@@ -154,6 +154,67 @@ thermostat and its outdoor sensor arrive together.
 `daikin-home.service` is a ready-made systemd unit — copy it to `/etc/systemd/system/`,
 adjust the paths, and `systemctl enable --now daikin-home`.
 
+### Run at login on a Mac (launchd)
+
+To keep the bridge running in the background, starting at login and restarting if it crashes,
+install it as a launchd agent. Stop any copy running in a terminal first: two can't share the
+HomeKit port.
+
+**1. Create the agent.** From the repo folder, after `mvn package`, paste this whole block.
+It records where your Java is and writes the agent definition:
+
+```bash
+JAVA="$(which java)"
+DIR="$(pwd)"
+cat > ~/Library/LaunchAgents/io.github.chelin1974.daikinhome.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>io.github.chelin1974.daikinhome</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$JAVA</string>
+    <string>-jar</string>
+    <string>$DIR/cli/target/daikin-home.jar</string>
+    <string>--config</string>
+    <string>$DIR/daikin.config.json</string>
+  </array>
+  <key>WorkingDirectory</key><string>$DIR</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>$HOME/Library/Logs/daikin-home.log</string>
+  <key>StandardErrorPath</key><string>$HOME/Library/Logs/daikin-home.log</string>
+</dict>
+</plist>
+EOF
+```
+
+**2. Start it.**
+
+```bash
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.github.chelin1974.daikinhome.plist
+```
+
+**3. Pair, if you haven't yet.** The setup code is in the log:
+
+```bash
+tail -f ~/Library/Logs/daikin-home.log
+```
+
+Press Ctrl-C to stop watching; the agent keeps running.
+
+| To | Run |
+| --- | --- |
+| Restart (after a config change or `mvn package`) | `launchctl kickstart -k gui/$(id -u)/io.github.chelin1974.daikinhome` |
+| Stop and remove | `launchctl bootout gui/$(id -u)/io.github.chelin1974.daikinhome` |
+| Check it's running | `launchctl print gui/$(id -u)/io.github.chelin1974.daikinhome \| grep state` |
+| Read the log | `tail -50 ~/Library/Logs/daikin-home.log` |
+
+The agent runs only while you're logged in and the Mac is awake. A sleeping laptop, lid
+closed included, takes the accessories to "No Response" until it wakes. For an always-on
+setup, use a Mac mini or a Linux box with the systemd unit above.
+
 ### CLI configuration
 
 | Setting | Default | Notes |
