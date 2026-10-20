@@ -26,6 +26,9 @@ public class DaikinProperties {
   /** SkyportHome app password. Used by the {@code skyport} backend only. */
   private String password;
 
+  /** LAN address to advertise HomeKit on. Blank picks one automatically. */
+  private String bindAddress;
+
   /** Integrator API key, from the Daikin One app's developer menu. */
   private String apiKey;
 
@@ -69,6 +72,7 @@ public class DaikinProperties {
     return BridgeSettings.builder()
         .backend(backend)
         .password(password)
+        .bindAddress(bindAddress)
         .apiKey(apiKey)
         .email(email)
         .integratorToken(integratorToken)
@@ -97,6 +101,14 @@ public class DaikinProperties {
 
   public void setPassword(String password) {
     this.password = password;
+  }
+
+  public String getBindAddress() {
+    return bindAddress;
+  }
+
+  public void setBindAddress(String bindAddress) {
+    this.bindAddress = bindAddress;
   }
 
   public String getApiKey() {

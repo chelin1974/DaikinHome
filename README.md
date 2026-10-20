@@ -167,6 +167,7 @@ adjust the paths, and `systemctl enable --now daikin-home`.
 | `requestTimeoutSeconds` | `20` | Per-request timeout. |
 | `bridgeName` | `Daikin One` | Shown while pairing. |
 | `port` | `51826` | HomeKit listen port. |
+| `bindAddress` | chosen automatically | LAN IP to advertise HomeKit on, e.g. `192.168.1.20`. Set it if the Home app can't find the bridge. |
 | `storagePath` | next to the config file | Pairing state — see below. |
 | `baseUrl` | Daikin's endpoint | Override only if Daikin moves the API. |
 
@@ -336,7 +337,10 @@ or the token was generated on an account that doesn't own the thermostat. Verify
 
 **No thermostats found** — same cause, almost always the account-ownership one.
 
-**The bridge doesn't appear in the Home app** — mDNS isn't reaching your phone. Check the
+**The bridge doesn't appear in the Home app** — check the `advertised at` line in the log
+first. If it shows `127.0.0.1` or an address that isn't on your home network, set
+`bindAddress` to the machine's LAN IP (`ipconfig getifaddr en0` on a Mac). Otherwise mDNS
+isn't reaching your phone. Check the
 bridge is on the same network segment (not a guest VLAN), and if it's in Docker, that it's
 using host networking.
 

@@ -11,6 +11,7 @@ import io.github.hapjava.server.HomekitAccessoryCategories;
 import io.github.hapjava.server.impl.HomekitRoot;
 import io.github.hapjava.server.impl.HomekitServer;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -93,7 +94,14 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
     }
 
     authInfo = FileAuthInfo.loadOrCreate(settings.storagePath());
-    server = new HomekitServer(settings.port());
+    InetAddress address = NetworkAddresses.resolve(settings.bindAddress());
+    if (address.isLoopbackAddress()) {
+      log.warn(
+          "advertising HomeKit on {}, a loopback address your iPhone cannot reach. Set"
+              + " \"bindAddress\" to this machine's LAN IP.",
+          address.getHostAddress());
+    }
+    server = new HomekitServer(address, settings.port());
     bridge =
         server.createBridge(
             authInfo,
@@ -143,6 +151,11 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
 
     bridge.start();
     running = true;
+    log.info(
+        "HomeKit bridge \"{}\" advertised at {}:{}",
+        settings.bridgeName(),
+        address.getHostAddress(),
+        settings.port());
 
     if (!isPaired()) {
       log.info("");

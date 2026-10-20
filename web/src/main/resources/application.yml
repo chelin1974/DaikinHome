@@ -20,6 +20,8 @@ daikin:
   bridge-name: Daikin One
   # The HomeKit accessory port, not the HTTP port below.
   homekit-port: 51826
+  # LAN IP to advertise HomeKit on. Blank picks one; set it if the Home app can't find the bridge.
+  bind-address: ${DAIKIN_BIND_ADDRESS:}
   # HomeKit pairing state. Back this file up; losing it un-pairs every controller.
   storage-path: daikin-home.state.json
 

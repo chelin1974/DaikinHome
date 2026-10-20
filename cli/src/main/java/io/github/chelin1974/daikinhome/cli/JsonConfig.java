@@ -42,6 +42,7 @@ public final class JsonConfig {
   static final class Raw {
     public String backend;
     public String password;
+    public String bindAddress;
     public String apiKey;
     public String email;
     public String integratorToken;
@@ -79,6 +80,7 @@ public final class JsonConfig {
     return BridgeSettings.builder()
         .backend(raw.backend)
         .password(raw.password)
+        .bindAddress(raw.bindAddress)
         .apiKey(raw.apiKey)
         .email(raw.email)
         .integratorToken(raw.integratorToken)

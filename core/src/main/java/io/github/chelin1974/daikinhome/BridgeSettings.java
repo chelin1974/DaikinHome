@@ -31,7 +31,8 @@ public record BridgeSettings(
     int port,
     Path storagePath,
     Backend backend,
-    String password) {
+    String password,
+    String bindAddress) {
 
   /** Which Daikin cloud the bridge talks to. */
   public enum Backend {
@@ -118,6 +119,8 @@ public record BridgeSettings(
         + bridgeName
         + ", port="
         + port
+        + ", bindAddress="
+        + bindAddress
         + ", storagePath="
         + storagePath
         + "]";
@@ -150,6 +153,7 @@ public record BridgeSettings(
     private Path storageDirectory;
     private String backend;
     private String password;
+    private String bindAddress;
 
     public Builder apiKey(String value) {
       this.apiKey = value;
@@ -212,6 +216,15 @@ public record BridgeSettings(
      */
     public Builder backend(String value) {
       this.backend = value;
+      return this;
+    }
+
+    /**
+     * LAN address to advertise HomeKit on, e.g. {@code 192.168.1.20}. Null picks one
+     * automatically; set it when the Home app cannot find the bridge.
+     */
+    public Builder bindAddress(String value) {
+      this.bindAddress = value;
       return this;
     }
 
@@ -310,7 +323,8 @@ public record BridgeSettings(
           port == null ? DEFAULT_PORT : port,
           storage,
           chosen,
-          openApi ? null : password);
+          openApi ? null : password,
+          isBlank(bindAddress) ? null : bindAddress.trim());
     }
 
     private static boolean isBlank(String value) {
