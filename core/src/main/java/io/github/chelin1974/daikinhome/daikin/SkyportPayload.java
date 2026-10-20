@@ -260,7 +260,7 @@ public final class SkyportPayload {
   private static Optional<String> text(JsonNode node, String field) {
     JsonNode value = node.get(field);
     return value != null && value.isTextual() && !value.asText().isBlank()
-        ? Optional.of(value.asText())
+        ? Optional.of(value.asText().trim())
         : Optional.empty();
   }
 

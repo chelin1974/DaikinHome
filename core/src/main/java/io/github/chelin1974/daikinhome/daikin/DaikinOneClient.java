@@ -411,7 +411,10 @@ public final class DaikinOneClient implements DaikinCloud {
       return Optional.empty();
     }
 
-    String name = firstText(node.path("name")).orElse(id.get());
+    // Daikin can return names with stray whitespace ("East Hallway "). HomeKit wants names
+    // to start and end with a letter or number, so trim before they reach an accessory.
+    String name =
+        firstText(node.path("name")).map(String::trim).filter(n -> !n.isEmpty()).orElse(id.get());
     return Optional.of(
         new DaikinDeviceSummary(
             id.get(),

@@ -26,6 +26,16 @@ import org.junit.jupiter.api.Test;
 
 class DaikinOneClientTest {
 
+  @Test
+  @DisplayName("trims names, since Daikin returns some with trailing spaces")
+  void trimsNames() throws Exception {
+    List<DaikinDeviceSummary> devices =
+        DaikinOneClient.normaliseDeviceListing(
+            MAPPER.readTree("[{\"id\": \"1\", \"name\": \"East Hallway \"}, {\"id\": \"2\", \"name\": \"  \"}]"));
+    assertEquals("East Hallway", devices.get(0).name());
+    assertEquals("2", devices.get(1).name());
+  }
+
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   private FakeDaikinCloud cloud;
