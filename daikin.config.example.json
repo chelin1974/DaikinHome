@@ -9,6 +9,8 @@
   "showIndoorHumidity": true,
   "showOutdoorTemperatureSensor": true,
 
+  "prometheusUrl": "",
+
   "bridgeName": "Daikin One",
   "port": 51826
 }

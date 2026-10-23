@@ -24,6 +24,10 @@ daikin:
   bind-address: ${DAIKIN_BIND_ADDRESS:}
   # HomeKit pairing state. Back this file up; losing it un-pairs every controller.
   storage-path: daikin-home.state.json
+  # Prometheus 3 base URL (started with --web.enable-otlp-receiver). Readings go to it as
+  # OpenTelemetry metrics every metrics-interval-seconds. Blank sends none.
+  prometheus-url: ${DAIKIN_PROMETHEUS_URL:}
+  metrics-interval-seconds: 60
 
 server:
   port: 8080

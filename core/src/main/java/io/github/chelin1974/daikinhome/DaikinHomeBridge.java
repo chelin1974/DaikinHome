@@ -59,6 +59,7 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
   private HomekitServer server;
   private HomekitRoot bridge;
   private FileAuthInfo authInfo;
+  private io.github.chelin1974.daikinhome.metrics.OtlpExporter exporter;
   private volatile boolean running;
   private volatile boolean shuttingDown;
 
@@ -176,6 +177,13 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
         "polling {} thermostat(s) every {}s",
         thermostats.size(),
         settings.pollInterval().toSeconds());
+
+    if (settings.otlpEndpoint() != null) {
+      // Its own thread: a slow or missing metrics backend never holds up HomeKit.
+      exporter = new io.github.chelin1974.daikinhome.metrics.OtlpExporter(
+          settings.otlpEndpoint(), this, settings.metricsInterval(), "1.0.0");
+      exporter.start();
+    }
   }
 
   /** Blocks until {@link #stop()} is called. */
@@ -190,6 +198,9 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
     shuttingDown = true;
     running = false;
 
+    if (exporter != null) {
+      exporter.close();
+    }
     thermostats.values().forEach(DaikinThermostat::dispose);
     scheduler.shutdownNow();
     if (bridge != null) {

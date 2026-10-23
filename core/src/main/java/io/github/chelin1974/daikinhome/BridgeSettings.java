@@ -1,5 +1,6 @@
 package io.github.chelin1974.daikinhome;
 
+import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -17,6 +18,9 @@ import java.util.Locale;
  * <p>Which credentials are required depends on {@link #backend()}: the Open API needs an API
  * key, email and integrator token; the SkyportHome cloud needs the app's email and password.
  * Fields the chosen backend does not use are null.
+ *
+ * <p>{@code otlpEndpoint} is where readings go as OpenTelemetry metrics (OTLP/HTTP), or null to
+ * not send them.
  */
 public record BridgeSettings(
     String apiKey,
@@ -32,7 +36,9 @@ public record BridgeSettings(
     Path storagePath,
     Backend backend,
     String password,
-    String bindAddress) {
+    String bindAddress,
+    URI otlpEndpoint,
+    Duration metricsInterval) {
 
   /** Which Daikin cloud the bridge talks to. */
   public enum Backend {
@@ -85,6 +91,13 @@ public record BridgeSettings(
   public static final Duration WRITE_DEBOUNCE = Duration.ofMillis(750);
 
   public static final Duration MIN_REQUEST_TIMEOUT = Duration.ofSeconds(5);
+
+  /** How often readings go to the metrics endpoint unless configured otherwise. */
+  public static final Duration DEFAULT_METRICS_INTERVAL = Duration.ofSeconds(60);
+  public static final Duration MIN_METRICS_INTERVAL = Duration.ofSeconds(10);
+
+  /** Where Prometheus 3 accepts OTLP/HTTP metrics, relative to its base URL. */
+  public static final String PROMETHEUS_OTLP_PATH = "/api/v1/otlp/v1/metrics";
   public static final String DEFAULT_BRIDGE_NAME = "Daikin One";
   public static final int DEFAULT_PORT = 51826;
   public static final String DEFAULT_STATE_FILE = "daikin-home.state.json";
@@ -123,6 +136,8 @@ public record BridgeSettings(
         + bindAddress
         + ", storagePath="
         + storagePath
+        + ", otlpEndpoint="
+        + otlpEndpoint
         + "]";
   }
 
@@ -154,6 +169,30 @@ public record BridgeSettings(
     private String backend;
     private String password;
     private String bindAddress;
+    private String prometheusUrl;
+    private String otlpEndpoint;
+    private Integer metricsIntervalSeconds;
+
+    /**
+     * Base URL of a Prometheus 3 started with {@code --web.enable-otlp-receiver}, such as
+     * {@code http://localhost:9090}. Readings go to its OTLP endpoint.
+     */
+    public Builder prometheusUrl(String value) {
+      this.prometheusUrl = value;
+      return this;
+    }
+
+    /** Full OTLP/HTTP metrics URL, for a collector or anything other than Prometheus. Wins over prometheusUrl. */
+    public Builder otlpEndpoint(String value) {
+      this.otlpEndpoint = value;
+      return this;
+    }
+
+    /** Seconds between metric pushes; at least 10, 60 when absent. */
+    public Builder metricsIntervalSeconds(Integer value) {
+      this.metricsIntervalSeconds = value;
+      return this;
+    }
 
     public Builder apiKey(String value) {
       this.apiKey = value;
@@ -309,6 +348,17 @@ public record BridgeSettings(
         storage = Path.of(DEFAULT_STATE_FILE);
       }
 
+      URI metricsEndpoint = null;
+      if (!isBlank(otlpEndpoint)) {
+        metricsEndpoint = httpUri("otlpEndpoint", otlpEndpoint.trim());
+      } else if (!isBlank(prometheusUrl)) {
+        metricsEndpoint = httpUri("prometheusUrl",
+            prometheusUrl.trim().replaceAll("/+$", "") + PROMETHEUS_OTLP_PATH);
+      }
+      Duration metrics = metricsIntervalSeconds == null
+          ? DEFAULT_METRICS_INTERVAL
+          : Duration.ofSeconds(Math.max(MIN_METRICS_INTERVAL.toSeconds(), metricsIntervalSeconds));
+
       boolean openApi = chosen == Backend.OPEN_API;
       return new BridgeSettings(
           openApi ? apiKey.trim() : null,
@@ -324,7 +374,22 @@ public record BridgeSettings(
           storage,
           chosen,
           openApi ? null : password,
-          isBlank(bindAddress) ? null : bindAddress.trim());
+          isBlank(bindAddress) ? null : bindAddress.trim(),
+          metricsEndpoint,
+          metrics);
+    }
+
+    private static URI httpUri(String setting, String value) {
+      try {
+        URI uri = URI.create(value);
+        if (("http".equals(uri.getScheme()) || "https".equals(uri.getScheme())) && uri.getHost() != null) {
+          return uri;
+        }
+      } catch (IllegalArgumentException e) {
+        // fall through
+      }
+      throw new SettingsException(
+          setting + " \"" + value + "\" is not an http(s) URL, such as http://localhost:9090.");
     }
 
     private static boolean isBlank(String value) {

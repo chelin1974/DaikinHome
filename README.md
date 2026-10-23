@@ -231,6 +231,9 @@ setup, use a Mac mini or a Linux box with the systemd unit above.
 | `bindAddress` | chosen automatically | LAN IP to advertise HomeKit on, e.g. `192.168.1.20`. Set it if the Home app can't find the bridge. |
 | `storagePath` | next to the config file | Pairing state — see below. |
 | `baseUrl` | Daikin's endpoint | Override only if Daikin moves the API. |
+| `prometheusUrl` | none | Prometheus 3 base URL, e.g. `http://localhost:9090`. Sends readings as OpenTelemetry metrics — see below. |
+| `otlpEndpoint` | `<prometheusUrl>/api/v1/otlp/v1/metrics` | Full OTLP/HTTP metrics URL, for an OpenTelemetry Collector or other backend. |
+| `metricsIntervalSeconds` | `60` | Seconds between metric pushes; at least 10. |
 
 ## Run: Spring Boot service
 
@@ -300,6 +303,45 @@ The service starts even when Daikin is unreachable. It comes up, reports `DOWN` 
 reach because its dependency is down is a service you cannot diagnose. Bad credentials are
 the exception: they will never fix themselves, so the retry loop stops and health says
 `retrying: false`.
+
+## History with Prometheus (OpenTelemetry)
+
+The bridge can send its readings as OpenTelemetry metrics over OTLP/HTTP, so they're kept and
+graphed by Prometheus, Grafana or anything that takes OTLP. No extra libraries: it posts the
+OTLP JSON encoding itself, on its own thread, so a backend that is down never affects HomeKit.
+It logs the first failure, then a reminder every ten minutes.
+
+Set `prometheusUrl` in `daikin.config.json` (or `daikin.prometheus-url` in `application.yml`)
+to a Prometheus 3 started with `--web.enable-otlp-receiver`. If you run
+[SpanHome](https://github.com/chelin1974/SpanHome), its `docker compose up -d` already runs one
+on `http://localhost:9090`, and its Grafana has a **Daikin Home** dashboard for these metrics.
+
+```json
+"prometheusUrl": "http://localhost:9090"
+```
+
+Readings are the bridge's last poll of each thermostat, sent every 60 seconds; Daikin's data
+itself changes every three minutes or so. Readings a thermostat doesn't report are left out.
+
+| In Prometheus | What it is |
+| --- | --- |
+| `daikin_indoor_temperature_celsius` | Indoor temperature |
+| `daikin_indoor_humidity_percent` | Indoor relative humidity |
+| `daikin_outdoor_temperature_celsius` | Outdoor temperature |
+| `daikin_outdoor_humidity_percent` | Outdoor relative humidity |
+| `daikin_heat_setpoint_celsius`, `daikin_cool_setpoint_celsius` | Setpoints |
+| `daikin_equipment_active{activity=...}` | 1 for what the equipment is doing: `heating`, `cooling`, `dehumidifying`, `fan`, `idle`; 0 for the rest |
+| `daikin_mode_active{mode=...}` | 1 for the mode: `off`, `heat`, `cool`, `auto`, `emergency_heat`; 0 for the rest |
+
+Every series has `thermostat`, `thermostat_id` and, when Daikin reports one, `location`.
+Some queries:
+
+```promql
+daikin_indoor_temperature_celsius * 9 / 5 + 32                     # indoor temperature in °F
+sum by (thermostat) (avg_over_time(daikin_equipment_active{activity="heating"}[24h])) * 24
+                                                                    # hours heating, last 24 h
+daikin_indoor_temperature_celsius - on (thermostat) daikin_heat_setpoint_celsius   # above setpoint
+```
 
 ## The state file
 

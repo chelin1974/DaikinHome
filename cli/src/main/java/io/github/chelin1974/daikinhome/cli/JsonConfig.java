@@ -54,6 +54,9 @@ public final class JsonConfig {
     public String bridgeName;
     public Integer port;
     public String storagePath;
+    public String prometheusUrl;
+    public String otlpEndpoint;
+    public Integer metricsIntervalSeconds;
   }
 
   public static BridgeSettings load(Path file) {
@@ -92,6 +95,9 @@ public final class JsonConfig {
         .bridgeName(raw.bridgeName)
         .port(raw.port)
         .storagePath(raw.storagePath)
+        .prometheusUrl(raw.prometheusUrl)
+        .otlpEndpoint(raw.otlpEndpoint)
+        .metricsIntervalSeconds(raw.metricsIntervalSeconds)
         .storageDirectory(storageDirectory)
         .build();
   }

@@ -214,4 +214,19 @@ class BridgeSettingsTest {
     assertFalse(openApi.contains("secret-key"), openApi);
     assertFalse(openApi.contains("secret-token"), openApi);
   }
+
+  @Test
+  @DisplayName("metrics go to Prometheus' OTLP endpoint, or an explicit one, every 60 s by default")
+  void metricsEndpoint() {
+    assertNull(credentials().build().otlpEndpoint());
+    BridgeSettings prometheus = credentials().prometheusUrl("http://localhost:9090/").build();
+    assertEquals("http://localhost:9090/api/v1/otlp/v1/metrics", prometheus.otlpEndpoint().toString());
+    assertEquals(Duration.ofSeconds(60), prometheus.metricsInterval());
+    BridgeSettings collector = credentials()
+        .prometheusUrl("http://localhost:9090").otlpEndpoint("http://collector:4318/v1/metrics")
+        .metricsIntervalSeconds(3).build();
+    assertEquals("http://collector:4318/v1/metrics", collector.otlpEndpoint().toString());
+    assertEquals(Duration.ofSeconds(10), collector.metricsInterval(), "raised to the minimum");
+    assertThrows(SettingsException.class, () -> credentials().prometheusUrl("localhost:9090").build());
+  }
 }

@@ -67,6 +67,15 @@ public class DaikinProperties {
   /** Where HomeKit pairing state is stored. Back this file up. */
   private String storagePath;
 
+  /** Prometheus 3 base URL; readings go to its OTLP receiver. Blank sends none. */
+  private String prometheusUrl;
+
+  /** Full OTLP/HTTP metrics URL, for a collector. Wins over prometheusUrl. */
+  private String otlpEndpoint;
+
+  /** Seconds between metric pushes. */
+  private Integer metricsIntervalSeconds;
+
   /** Applies defaults, clamping and validation. */
   public BridgeSettings toBridgeSettings() {
     return BridgeSettings.builder()
@@ -84,6 +93,9 @@ public class DaikinProperties {
         .bridgeName(bridgeName)
         .port(homekitPort)
         .storagePath(storagePath)
+        .prometheusUrl(prometheusUrl)
+        .otlpEndpoint(otlpEndpoint)
+        .metricsIntervalSeconds(metricsIntervalSeconds)
         .build();
   }
 
@@ -197,5 +209,29 @@ public class DaikinProperties {
 
   public void setStoragePath(String storagePath) {
     this.storagePath = storagePath;
+  }
+
+  public String getPrometheusUrl() {
+    return prometheusUrl;
+  }
+
+  public void setPrometheusUrl(String prometheusUrl) {
+    this.prometheusUrl = prometheusUrl;
+  }
+
+  public String getOtlpEndpoint() {
+    return otlpEndpoint;
+  }
+
+  public void setOtlpEndpoint(String otlpEndpoint) {
+    this.otlpEndpoint = otlpEndpoint;
+  }
+
+  public Integer getMetricsIntervalSeconds() {
+    return metricsIntervalSeconds;
+  }
+
+  public void setMetricsIntervalSeconds(Integer metricsIntervalSeconds) {
+    this.metricsIntervalSeconds = metricsIntervalSeconds;
   }
 }
