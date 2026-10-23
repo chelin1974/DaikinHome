@@ -15,7 +15,16 @@ Daikin One  →  Daikin Cloud Open API  →  this bridge  →  Apple Home / Siri
 ```
 
 No Homebridge, no Home Assistant, no Node.js. No hardware changes, no replacing the
-thermostat, and the Daikin app keeps working exactly as before.
+thermostat, and the Daikin app keeps working exactly as before. It can also send every reading
+to Prometheus as OpenTelemetry metrics, for history and Grafana.
+
+**Contents:** [Which backend](#which-backend-open-api-or-skyporthome) ·
+[What shows up in Home](#what-shows-up-in-home) · [Requirements](#requirements) ·
+[Getting your Daikin credentials](#getting-your-daikin-credentials) ·
+[Getting started](#getting-started) · [Running it as a service](#running-it-as-a-service) ·
+[Configuration](#configuration) · [Spring Boot service](#run-spring-boot-service) ·
+[History with Prometheus](#history-with-prometheus-opentelemetry) ·
+[Troubleshooting](#troubleshooting)
 
 ## Which backend: Open API or SkyportHome
 
@@ -80,7 +89,9 @@ Everything works with Siri and with Home automations.
 
 ## Requirements
 
-- **Java 21 or newer.**
+- **Java 21 or newer**: `brew install openjdk@21` on a Mac,
+  `sudo apt install openjdk-21-jre-headless` on Debian or Ubuntu. Maven to build
+  (`brew install maven`, `sudo apt install maven`).
 - **A machine that stays on**, on the same LAN as your Home hub — a Raspberry Pi, a NAS, a
   spare Mac. HomeKit finds the bridge over mDNS, so it has to be on the same network segment
   as your Apple TV or HomePod. Don't put it behind Docker's default bridge network unless
@@ -115,17 +126,28 @@ Accept the Daikin B2B Terms and the Open API License Terms, and the API key is s
 Keep both the API key and the integrator token secret — together they grant full control of
 your HVAC system.
 
-## Build
+## Getting started
+
+**1. Build.** From the repo folder:
 
 ```bash
 mvn package
 ```
 
-Produces both jars. Check your credentials before going anywhere near HomeKit:
+This builds both jars: `cli/target/daikin-home.jar` and `web/target/daikin-home-web.jar`.
+
+**2. Configure.** Copy the example for your backend and fill in your credentials:
 
 ```bash
-cp daikin.config.example.json daikin.config.json
+cp daikin.config.skyport.example.json daikin.config.json   # SkyportHome account
+cp daikin.config.example.json daikin.config.json           # or: Open API
+chmod 600 daikin.config.json
 $EDITOR daikin.config.json
+```
+
+**3. Check your credentials** before going anywhere near HomeKit:
+
+```bash
 java -jar cli/target/daikin-home.jar --config daikin.config.json --probe
 ```
 
@@ -133,13 +155,13 @@ That authenticates, lists your thermostats, and dumps the raw JSON each one retu
 that dump — Daikin's payload varies by model and firmware, and it's the fastest way to tell
 "the bridge has a bug" apart from "your thermostat doesn't report that field".
 
-## Run: CLI
+**4. Start it and pair.**
 
 ```bash
 java -jar cli/target/daikin-home.jar --config daikin.config.json
 ```
 
-It prints a setup code at startup:
+It runs in that terminal until you press **Ctrl+C**, and prints a setup code at startup:
 
 ```
   +------------------------------------------+
@@ -148,20 +170,29 @@ It prints a setup code at startup:
   +------------------------------------------+
 ```
 
-In the Home app: **Add Accessory → More options… → pick the bridge → enter that code**. The
-thermostat and its outdoor sensor arrive together.
+In the Home app: **+ → Add Accessory → More options… → pick the bridge → enter that code**,
+and accept the "uncertified accessory" warning. The thermostats and their outdoor sensor
+arrive together.
 
-`daikin-home.service` is a ready-made systemd unit — copy it to `/etc/systemd/system/`,
-adjust the paths, and `systemctl enable --now daikin-home`.
+**5. History (optional).** Add `"prometheusUrl": "http://localhost:9090"` to send readings to
+Prometheus. See [History with Prometheus](#history-with-prometheus-opentelemetry).
 
-### Run at login on a Mac (launchd)
+Once it works, stop it with Ctrl+C and set it up as a service, below, so it keeps running
+without a terminal.
 
-To keep the bridge running in the background, starting at login and restarting if it crashes,
-install it as a launchd agent. Stop any copy running in a terminal first: two can't share the
-HomeKit port.
+## Running it as a service
+
+Run it as a service so it starts on its own after a reboot and restarts if it crashes. Stop any
+copy running in a terminal first: two can't share the HomeKit port. The pairing lives in
+`daikin-home.state.json`, so as long as that file comes along, you don't need to pair again.
+
+### macOS (launchd)
+
+On a Mac the bridge runs as a launchd agent: it starts when you log in and is restarted if it
+stops.
 
 **1. Create the agent.** From the repo folder, after `mvn package`, paste this whole block.
-It records where your Java is and writes the agent definition:
+It records where your Java and the repo are, and writes the agent definition:
 
 ```bash
 JAVA="$(which java)"
@@ -196,13 +227,13 @@ EOF
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.github.chelin1974.daikinhome.plist
 ```
 
-**3. Pair, if you haven't yet.** The setup code is in the log:
+**3. Check the log.** The setup code, if it isn't paired yet, is in it:
 
 ```bash
 tail -f ~/Library/Logs/daikin-home.log
 ```
 
-Press Ctrl-C to stop watching; the agent keeps running.
+Press Ctrl+C to stop watching; the agent keeps running.
 
 | To | Run |
 | --- | --- |
@@ -213,9 +244,83 @@ Press Ctrl-C to stop watching; the agent keeps running.
 
 The agent runs only while you're logged in and the Mac is awake. A sleeping laptop, lid
 closed included, takes the accessories to "No Response" until it wakes. For an always-on
-setup, use a Mac mini or a Linux box with the systemd unit above.
+setup, use a Mac mini set to never sleep, or a Linux box.
 
-### CLI configuration
+### Linux (systemd)
+
+On Linux the bridge runs as a systemd service under its own user, from `/opt/daikin-home`.
+`daikin-home.service` in this repo is the unit file.
+
+**1. Install Java** (21 or newer), e.g. on Debian or Ubuntu:
+
+```bash
+sudo apt install openjdk-21-jre-headless
+```
+
+**2. Create a user and a folder for it, and copy in the jar and your config.** If the bridge
+was already paired on another machine, copy its `daikin-home.state.json` too, so you don't
+have to pair again.
+
+```bash
+sudo useradd --system --home-dir /opt/daikin-home --shell /usr/sbin/nologin daikin
+sudo mkdir -p /opt/daikin-home
+sudo cp cli/target/daikin-home.jar daikin.config.json /opt/daikin-home/
+sudo cp daikin-home.state.json /opt/daikin-home/ 2>/dev/null || true
+sudo chown -R daikin: /opt/daikin-home
+sudo chmod 700 /opt/daikin-home
+```
+
+**3. Install and start the service.**
+
+```bash
+sudo cp daikin-home.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now daikin-home
+```
+
+**4. Check the log.** The setup code, if it isn't paired yet, is in it:
+
+```bash
+journalctl -u daikin-home -f
+```
+
+| To | Run |
+| --- | --- |
+| Restart (after a config change) | `sudo systemctl restart daikin-home` |
+| Stop / start | `sudo systemctl stop daikin-home` / `sudo systemctl start daikin-home` |
+| Check it's running | `systemctl status daikin-home` |
+| Read the log | `journalctl -u daikin-home -n 100` |
+| Stop it starting at boot | `sudo systemctl disable daikin-home` |
+
+**Firewall.** If the machine runs one, open HomeKit's port and Bonjour:
+
+```bash
+sudo ufw allow 51826/tcp   # HomeKit (the "port" setting; 51827 in the SkyportHome example)
+sudo ufw allow 5353/udp    # Bonjour, so the Home app can find the bridge
+```
+
+For the Spring Boot flavour, use `daikin-home-web.service` instead; see
+[Run: Spring Boot service](#run-spring-boot-service).
+
+### Updating
+
+```bash
+git pull
+mvn package
+```
+
+Then restart it: on a Mac, `launchctl kickstart -k gui/$(id -u)/io.github.chelin1974.daikinhome`;
+on Linux, copy the new jar over and restart:
+
+```bash
+sudo cp cli/target/daikin-home.jar /opt/daikin-home/
+sudo systemctl restart daikin-home
+```
+
+## Configuration
+
+`daikin.config.json`, passed with `--config`. Restart the bridge after changing it. (The Spring
+Boot service takes the same settings under `daikin.*`; see below.)
 
 | Setting | Default | Notes |
 | --- | --- | --- |
@@ -266,7 +371,23 @@ server:
   port: 8080
 ```
 
-`daikin-home-web.service` is the matching systemd unit.
+**As a service on Linux**, `daikin-home-web.service` is the matching systemd unit. It reads
+your credentials from `/etc/daikin-home.env`, so they don't sit in the world-readable unit:
+
+```bash
+sudo useradd --system --home-dir /opt/daikin-home --shell /usr/sbin/nologin daikin
+sudo mkdir -p /opt/daikin-home
+sudo cp web/target/daikin-home-web.jar /opt/daikin-home/
+sudo chown -R daikin: /opt/daikin-home
+sudo install -m 600 /dev/null /etc/daikin-home.env
+sudoedit /etc/daikin-home.env      # DAIKIN_BACKEND=skyport, DAIKIN_EMAIL=..., DAIKIN_PASSWORD=...
+sudo cp daikin-home-web.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now daikin-home-web
+journalctl -u daikin-home-web -f
+```
+
+Add `DAIKIN_PROMETHEUS_URL=http://localhost:9090` to the same file to send metrics.
 
 ### REST API
 
