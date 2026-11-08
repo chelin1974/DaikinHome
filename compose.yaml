@@ -3,6 +3,8 @@
 #   docker compose up -d
 #   docker compose logs -f        # the HomeKit setup code is printed at startup
 #
+# Prometheus and Grafana for history are in compose.history.yaml.
+#
 # Credentials come from a .env file next to this one:
 #
 #   DAIKIN_BACKEND=skyport
@@ -32,6 +34,9 @@ services:
       # Set this to the host's LAN IP if the Home app cannot find the bridge - the
       # auto-pick can choose an interface your iPhone cannot reach.
       # DAIKIN_BIND_ADDRESS: 192.168.7.10
+      # Send readings to Prometheus from compose.history.yaml. Host networking means it is
+      # on this machine's localhost.
+      # DAIKIN_PROMETHEUS_URL: http://localhost:9090
 
     volumes:
       # HomeKit pairing state. Losing this un-pairs every controller.

@@ -174,8 +174,9 @@ In the Home app: **+ → Add Accessory → More options… → pick the bridge �
 and accept the "uncertified accessory" warning. The thermostats and their outdoor sensor
 arrive together.
 
-**5. History (optional).** Add `"prometheusUrl": "http://localhost:9090"` to send readings to
-Prometheus. See [History with Prometheus](#history-with-prometheus-opentelemetry).
+**5. History (optional).** `docker compose -f compose.history.yaml up -d` starts Prometheus and
+Grafana; add `"prometheusUrl": "http://localhost:9090"` to send readings to it. See
+[History with Prometheus](#history-with-prometheus-opentelemetry).
 
 Once it works, stop it with Ctrl+C and set it up as a service, below, so it keeps running
 without a terminal.
@@ -479,10 +480,26 @@ graphed by Prometheus, Grafana or anything that takes OTLP. No extra libraries: 
 OTLP JSON encoding itself, on its own thread, so a backend that is down never affects HomeKit.
 It logs the first failure, then a reminder every ten minutes.
 
-Set `prometheusUrl` in `daikin.config.json` (or `daikin.prometheus-url` in `application.yml`)
-to a Prometheus 3 started with `--web.enable-otlp-receiver`. If you run
-[SpanHome](https://github.com/chelin1974/SpanHome), its `docker compose up -d` already runs one
-on `http://localhost:9090`, and `docker compose --profile grafana up -d` adds Grafana.
+**1. Start Prometheus and Grafana.** With Docker, from the repo folder:
+
+```bash
+docker compose -f compose.history.yaml up -d
+```
+
+That runs Prometheus 3.5 on http://localhost:9090, with the OTLP receiver on and 400 days of
+retention, and Grafana on http://localhost:3000 (admin / admin the first time) with Prometheus
+as its data source and the Daikin Home dashboard below. It needs no `.env`, and works the
+same whether the bridge runs in Docker or not. Data lives in Docker volumes, so it survives
+restarts and upgrades; `docker compose -f compose.history.yaml down` stops them and keeps it,
+`down -v` deletes it. Without Docker, run any Prometheus 3 with `--web.enable-otlp-receiver`
+and this repo's `prometheus.yml`.
+
+If you also run [SpanHome](https://github.com/chelin1974/SpanHome), its compose file runs the
+same pair on the same ports: run only one of the two stacks and point both bridges at it.
+
+**2. Point the bridge at it.** Set `prometheusUrl` in `daikin.config.json` (or
+`daikin.prometheus-url` in `application.yml`, or `DAIKIN_PROMETHEUS_URL` in `compose.yaml`),
+and restart the bridge:
 
 ```json
 "prometheusUrl": "http://localhost:9090"
@@ -513,14 +530,16 @@ daikin_indoor_temperature_celsius - on (thermostat) daikin_heat_setpoint_celsius
 
 ### Grafana dashboard
 
-`grafana/daikin-home.json` is a **Daikin Home** dashboard for these metrics: temperatures
-against setpoints, humidity, what the equipment is doing, heating and cooling hours, and the
-HVAC circuits' power from SpanHome, when it sends to the same Prometheus. It uses whichever
-Prometheus data source Grafana has.
+`grafana/dashboards/daikin-home.json` is a **Daikin Home** dashboard for these metrics:
+temperatures against setpoints, humidity, what the equipment is doing, heating and cooling
+hours, and the HVAC circuits' power from SpanHome, when it sends to the same Prometheus. Pick
+thermostats at the top, and the time range at the top right.
 
-To add it, in Grafana go to **Dashboards → New → Import** and upload the file. To have
-SpanHome's Grafana load it on its own at every start, copy it into SpanHome's
-`grafana/dashboards` folder and restart Grafana.
+`compose.history.yaml` loads it into Grafana at every start, under **Dashboards**. Changes you
+save in Grafana last until this repo's copy changes; to keep one for good, export the
+dashboard's JSON over the file. For another Grafana, such as SpanHome's, go to **Dashboards →
+New → Import** and upload the file, or copy it into SpanHome's `grafana/dashboards` folder so
+it loads at start. It uses whichever Prometheus data source Grafana has.
 
 ## The state file
 
