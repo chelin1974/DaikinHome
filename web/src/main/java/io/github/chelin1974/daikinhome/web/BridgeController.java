@@ -34,7 +34,11 @@ public class BridgeController {
       int homekitPort,
       long pollIntervalSeconds,
       int thermostatCount,
-      String error) {}
+      String error,
+      // False when the mDNS responder has died: the bridge is running but nothing in
+      // Apple Home can reach it.
+      boolean discoverable,
+      String advertisementError) {}
 
   @GetMapping
   public BridgeStatusDto status() {
@@ -48,6 +52,8 @@ public class BridgeController {
         settings.port(),
         settings.pollInterval().toSeconds(),
         gateway.devices().size(),
-        status.lastError());
+        status.lastError(),
+        gateway.advertisementFailure().isEmpty(),
+        gateway.advertisementFailure().orElse(null));
   }
 }

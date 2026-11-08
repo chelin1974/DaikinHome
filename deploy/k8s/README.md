@@ -84,15 +84,31 @@ kubectl -n daikin-home logs deploy/daikin-home | grep -A2 'setup code'
 It is also on `GET /api/bridge` until the first controller pairs, after which it is
 withheld. If you lose it, delete the state PVC and restart — you will re-pair everything.
 
-## A known gap
+## When the mDNS responder dies
 
-The bridge sets its `running` flag once at startup and never revisits it. If JmDNS dies
-later — which it does, loudly, when a node's network changes under it — the bridge keeps
-serving HTTP and reporting healthy while being completely invisible to HomeKit. A liveness
-probe cannot catch that today. If you see "No Response" in the Home app while
-`/actuator/health` says `UP`, check the logs for `Could not recover we are Down!` and
-restart the pod:
+JmDNS can die under a running bridge — a network change on the node is enough — and when
+it does it logs `Could not recover we are Down!` and never comes back. The bridge used to
+carry on serving HTTP and reporting `UP` while being completely invisible to Apple Home.
+
+It no longer does. The bridge owns its JmDNS instance and registers for the library's
+`cannotRecoverFromIOError` callback, and separately probes every 60 seconds that multicast
+to `224.0.0.251` still works at all (three consecutive failures count as dead, so a DHCP
+renew does not trigger anything). When either fires:
+
+- `/actuator/health` turns **DOWN** with `discoverable: false` and the reason.
+- `/api/bridge` reports `discoverable: false` and `advertisementError`.
+- The service publishes Spring's `LivenessState.BROKEN`, so
+  **`/actuator/health/liveness` turns 503 and the pod is restarted.** This is what makes
+  the liveness probe worth having; before this it could only catch a dead JVM.
+- The CLI flavour exits 70 instead, so `Restart=on-failure` under systemd does the same job.
+
+Readiness is deliberately left alone: the REST API still works and is the only way to read
+the reason, so pulling the pod out of its Service would hide the diagnosis.
+
+Recovery is a restart, not an in-process repair: JmDNS does not come back, so rebuilding it
+underneath a live HAP server would be a lot of machinery for a fault whose honest answer is
+"start again".
 
 ```bash
-kubectl -n daikin-home rollout restart deploy/daikin-home
+kubectl -n daikin-home logs deploy/daikin-home --previous | grep -i "advertisement is dead"
 ```

@@ -37,6 +37,9 @@ class FakeGateway implements ThermostatGateway {
   boolean paired;
   String setupCode;
 
+  /** Non-null once the fake's mDNS advertisement is considered dead. */
+  String advertisementFailure;
+
   /** Set to make the next write blow up, for exception-mapping tests. */
   Supplier<RuntimeException> failNextWrite;
 
@@ -59,6 +62,7 @@ class FakeGateway implements ThermostatGateway {
     running = true;
     paired = false;
     setupCode = "379-96-555";
+    advertisementFailure = null;
     failNextWrite = null;
 
     DaikinDeviceSummary summary =
@@ -91,6 +95,11 @@ class FakeGateway implements ThermostatGateway {
   @Override
   public boolean isPaired() {
     return paired;
+  }
+
+  @Override
+  public Optional<String> advertisementFailure() {
+    return Optional.ofNullable(advertisementFailure);
   }
 
   @Override

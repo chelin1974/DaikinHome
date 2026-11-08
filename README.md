@@ -352,8 +352,17 @@ Two more things that are easy to get wrong:
   advertise the same bridge, and write the same state file. A rolling update would deadlock
   on the port.
 
-`deploy/k8s/README.md` has the full walkthrough, including why the probes deliberately
-avoid `/actuator/health`.
+One failure gets special handling. JmDNS — the mDNS responder HomeKit depends on — can die
+under a running bridge, and when it does it never comes back: the bridge keeps serving HTTP
+and reporting healthy while being invisible to Apple Home. The bridge now watches for that,
+through the library's own `cannotRecoverFromIOError` callback and a periodic check that
+multicast still works, and reports it on `/actuator/health` (`discoverable: false`) and
+`/api/bridge`. The Spring service also marks its liveness BROKEN so a Kubernetes probe
+restarts the pod; the CLI exits 70 so systemd does. That is the difference between a
+liveness probe that catches a dead JVM and one that catches the fault you actually hit.
+
+`deploy/k8s/README.md` has the full walkthrough, including why the readiness probe
+deliberately avoids `/actuator/health`.
 
 ## Configuration
 

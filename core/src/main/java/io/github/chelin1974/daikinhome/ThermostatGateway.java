@@ -18,6 +18,14 @@ public interface ThermostatGateway {
   /** True once the bridge is up and publishing accessories. */
   boolean isRunning();
 
+  /**
+   * Why Apple Home can no longer reach this bridge, or empty while it still can.
+   *
+   * <p>Distinct from {@link #isRunning()}: a bridge whose mDNS responder has died is still
+   * running and still invisible to HomeKit.
+   */
+  Optional<String> advertisementFailure();
+
   /** True once at least one controller has paired with the bridge. */
   boolean isPaired();
 
