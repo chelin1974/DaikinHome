@@ -1,0 +1,44 @@
+# Prometheus and Grafana, for the bridge's history. Needs no .env, and works the same whether
+# the bridge runs in Docker (compose.yaml) or outside it (CLI, launchd, systemd).
+#
+#   docker compose -f compose.history.yaml up -d    # Prometheus on http://localhost:9090,
+#                                                   # Grafana on http://localhost:3000
+#   docker compose -f compose.history.yaml down     # stop them; the data is kept
+#
+# Point the bridge at http://localhost:9090 ("prometheusUrl", or DAIKIN_PROMETHEUS_URL).
+#
+# SpanHome's compose file runs the same pair on the same ports. If you run both bridges, run
+# only one of the two stacks and point both bridges at it.
+name: daikin-home-history
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=400d
+      - --web.enable-otlp-receiver
+    ports:
+      # Only this machine: the bridge pushes here, Grafana reads over the compose network.
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    depends_on: [prometheus]
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/daikin-home.yml:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
