@@ -435,7 +435,7 @@ It logs the first failure, then a reminder every ten minutes.
 Set `prometheusUrl` in `daikin.config.json` (or `daikin.prometheus-url` in `application.yml`)
 to a Prometheus 3 started with `--web.enable-otlp-receiver`. If you run
 [SpanHome](https://github.com/chelin1974/SpanHome), its `docker compose up -d` already runs one
-on `http://localhost:9090`, and its Grafana has a **Daikin Home** dashboard for these metrics.
+on `http://localhost:9090`, and `docker compose --profile grafana up -d` adds Grafana.
 
 ```json
 "prometheusUrl": "http://localhost:9090"
@@ -463,6 +463,17 @@ sum by (thermostat) (avg_over_time(daikin_equipment_active{activity="heating"}[2
                                                                     # hours heating, last 24 h
 daikin_indoor_temperature_celsius - on (thermostat) daikin_heat_setpoint_celsius   # above setpoint
 ```
+
+### Grafana dashboard
+
+`grafana/daikin-home.json` is a **Daikin Home** dashboard for these metrics: temperatures
+against setpoints, humidity, what the equipment is doing, heating and cooling hours, and the
+HVAC circuits' power from SpanHome, when it sends to the same Prometheus. It uses whichever
+Prometheus data source Grafana has.
+
+To add it, in Grafana go to **Dashboards → New → Import** and upload the file. To have
+SpanHome's Grafana load it on its own at every start, copy it into SpanHome's
+`grafana/dashboards` folder and restart Grafana.
 
 ## The state file
 
