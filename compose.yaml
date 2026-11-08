@@ -49,6 +49,15 @@ services:
       # HomeKit pairing state. Losing this un-pairs every controller.
       - daikin-state:/data
 
+    # Tomcat insists on a writable temp dir and refuses to start without one: "Unable to
+    # create tempDir. java.io.tmpdir is set to /tmp". On the container's writable layer that
+    # is a disk write, so a full Docker disk stopped the bridge booting at all. In RAM it
+    # cannot fill up with anything else, and the few KB Tomcat puts there are scratch - the
+    # pairing state lives on the volume above, not here. The Kubernetes manifests mount an
+    # emptyDir at /tmp for the same reason.
+    tmpfs:
+      - /tmp:size=64m
+
     healthcheck:
       # The JVM and HTTP listener only - deliberately not /actuator/health, which reports
       # DOWN during a Daikin cloud outage and would mark this container unhealthy over a
