@@ -5,8 +5,8 @@ import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinAuth
 import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinNetworkException;
 import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinResponseException;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -299,10 +299,10 @@ public final class SkyportCloudClient implements DaikinCloud {
       throw e;
     }
 
-    String issued = session == null ? null : session.path("AccessToken").asText(null);
+    String issued = session == null ? null : session.path("AccessToken").asString(null);
     if (isBlank(issued)) {
       // Older responses used camelCase; accept either.
-      issued = session == null ? null : session.path("accessToken").asText(null);
+      issued = session == null ? null : session.path("accessToken").asString(null);
     }
     if (isBlank(issued)) {
       throw new DaikinAuthException(
@@ -362,7 +362,7 @@ public final class SkyportCloudClient implements DaikinCloud {
       return "";
     }
     try {
-      String message = MAPPER.readTree(body).path("message").asText("");
+      String message = MAPPER.readTree(body).path("message").asString("");
       return message.isBlank() ? "" : ": " + SkyportPayload.truncate(message);
     } catch (Exception e) {
       return "";

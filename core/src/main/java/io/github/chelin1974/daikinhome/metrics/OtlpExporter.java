@@ -1,6 +1,6 @@
 package io.github.chelin1974.daikinhome.metrics;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.chelin1974.daikinhome.ThermostatGateway;
 import java.net.InetAddress;
 import java.net.URI;

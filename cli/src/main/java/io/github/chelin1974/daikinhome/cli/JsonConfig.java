@@ -1,7 +1,8 @@
 package io.github.chelin1974.daikinhome.cli;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import io.github.chelin1974.daikinhome.BridgeSettings;
 import io.github.chelin1974.daikinhome.BridgeSettings.SettingsException;
 import java.io.IOException;
@@ -70,7 +71,7 @@ public final class JsonConfig {
     Raw raw;
     try {
       raw = new ObjectMapper().readValue(Files.readString(file), Raw.class);
-    } catch (IOException e) {
+    } catch (IOException | JacksonException e) {
       throw new SettingsException(
           "could not parse " + file.toAbsolutePath() + ": " + e.getMessage(), e);
     }
@@ -106,7 +107,7 @@ public final class JsonConfig {
   static Integer requestedPollIntervalSeconds(Path file) {
     try {
       return new ObjectMapper().readValue(Files.readString(file), Raw.class).pollIntervalSeconds;
-    } catch (IOException e) {
+    } catch (IOException | JacksonException e) {
       return null;
     }
   }
