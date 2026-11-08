@@ -1,6 +1,6 @@
 package io.github.chelin1974.daikinhome.cli;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import io.github.chelin1974.daikinhome.BridgeSettings;
 import io.github.chelin1974.daikinhome.DaikinClients;
 import io.github.chelin1974.daikinhome.daikin.DaikinCloud;

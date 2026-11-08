@@ -1,7 +1,7 @@
 package io.github.chelin1974.daikinhome.daikin;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.chelin1974.daikinhome.daikin.DaikinDevice.DaikinMode;
 import io.github.chelin1974.daikinhome.daikin.DaikinDevice.EquipmentStatus;
 import java.util.ArrayList;
@@ -259,8 +259,8 @@ public final class SkyportPayload {
 
   private static Optional<String> text(JsonNode node, String field) {
     JsonNode value = node.get(field);
-    return value != null && value.isTextual() && !value.asText().isBlank()
-        ? Optional.of(value.asText().trim())
+    return value != null && value.isString() && !value.asString().isBlank()
+        ? Optional.of(value.asString().trim())
         : Optional.empty();
   }
 

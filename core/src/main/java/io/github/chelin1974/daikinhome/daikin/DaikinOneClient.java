@@ -5,8 +5,8 @@ import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinAuth
 import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinNetworkException;
 import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinResponseException;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -294,7 +294,7 @@ public final class DaikinOneClient implements DaikinCloud {
     // Attempt 2 so the 401-retry branch above cannot fire for the token call itself.
     JsonNode token = dispatch("POST", "/v1/token", body, true, 2);
 
-    String issued = token == null ? null : token.path("accessToken").asText(null);
+    String issued = token == null ? null : token.path("accessToken").asString(null);
     if (isBlank(issued)) {
       throw new DaikinAuthException("the Daikin token endpoint did not return an accessToken");
     }
@@ -419,8 +419,8 @@ public final class DaikinOneClient implements DaikinCloud {
         new DaikinDeviceSummary(
             id.get(),
             name,
-            node.path("model").isTextual() ? node.get("model").asText() : null,
-            node.path("firmwareVersion").isTextual() ? node.get("firmwareVersion").asText() : null,
+            node.path("model").isString() ? node.get("model").asString() : null,
+            node.path("firmwareVersion").isString() ? node.get("firmwareVersion").asString() : null,
             locationName));
   }
 
@@ -448,8 +448,8 @@ public final class DaikinOneClient implements DaikinCloud {
 
   private static Optional<String> firstText(JsonNode... nodes) {
     for (JsonNode node : nodes) {
-      if (node != null && node.isTextual() && !node.asText().isEmpty()) {
-        return Optional.of(node.asText());
+      if (node != null && node.isString() && !node.asString().isEmpty()) {
+        return Optional.of(node.asString());
       }
     }
     return Optional.empty();

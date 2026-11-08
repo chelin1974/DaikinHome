@@ -4,8 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import io.github.chelin1974.daikinhome.daikin.DaikinDevice;
 import io.github.chelin1974.daikinhome.daikin.DaikinDevice.DaikinMode;
 import io.github.chelin1974.daikinhome.daikin.DaikinDevice.EquipmentStatus;
