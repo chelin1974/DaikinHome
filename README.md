@@ -317,6 +317,44 @@ sudo cp cli/target/daikin-home.jar /opt/daikin-home/
 sudo systemctl restart daikin-home
 ```
 
+## Docker and Kubernetes
+
+A `Dockerfile` builds the Spring Boot flavour, `compose.yaml` runs it under plain Docker,
+and `deploy/k8s/` holds Kubernetes manifests. Images are published to
+`ghcr.io/chelin1974/daikin-home` by `.github/workflows/image.yml` for amd64 and arm64.
+
+```bash
+docker compose up -d                        # needs a .env with your credentials
+kubectl apply -k deploy/k8s                 # then create the Secret - see deploy/k8s/README.md
+```
+
+**One thing decides the shape of all of it: HomeKit needs mDNS multicast on your LAN, and
+a container on a bridge or overlay network cannot do multicast.** Discovery and resolution
+are multicast to `224.0.0.251:5353` on the local link; without it the Home app never finds
+the bridge, and a bridge that was already paired stops resolving and shows every accessory
+as "No Response".
+
+So both run on the host's network — `network_mode: host` under Docker, `hostNetwork: true`
+in Kubernetes. That in turn means:
+
+- The container's ports are the host's ports: `8080` for the REST API, `51826` for HomeKit.
+- In Kubernetes the pod must be pinned to a node that is physically on the same LAN as your
+  Apple TV or HomePod, which is what the `homekit=true` `nodeSelector` is for. mDNS does not
+  cross subnets, so **a cloud cluster cannot host this at all** — it needs a node at home.
+- Docker Desktop on macOS and Windows does not give a container the real LAN, so host
+  networking does not help there. Run it on a Linux box on your network.
+
+Two more things that are easy to get wrong:
+
+- **The pairing state must be on a volume.** `daikin-home.state.json` holds the bridge's
+  HomeKit identity and every paired controller's key; lose it and you re-pair everything.
+- **One replica, `strategy: Recreate`.** Two of these would fight over the HomeKit port,
+  advertise the same bridge, and write the same state file. A rolling update would deadlock
+  on the port.
+
+`deploy/k8s/README.md` has the full walkthrough, including why the probes deliberately
+avoid `/actuator/health`.
+
 ## Configuration
 
 `daikin.config.json`, passed with `--config`. Restart the bridge after changing it. (The Spring

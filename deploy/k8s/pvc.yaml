@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: daikin-home-state
+  labels:
+    app.kubernetes.io/name: daikin-home
+spec:
+  accessModes:
+    # One writer, which matches replicas: 1 and the Recreate strategy.
+    - ReadWriteOnce
+  resources:
+    requests:
+      # The state file is a few hundred bytes. This is the smallest most provisioners
+      # will accept.
+      storage: 64Mi
+  # Left unset so the cluster's default StorageClass is used. If your default is a
+  # node-local provisioner (local-path on k3s, for instance) the volume is pinned to
+  # whichever node first mounts it - which is fine here, because nodeSelector pins the
+  # pod to one node anyway. Uncomment to be explicit:
+  # storageClassName: local-path
