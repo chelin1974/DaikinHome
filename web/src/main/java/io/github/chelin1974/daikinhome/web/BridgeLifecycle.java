@@ -2,6 +2,7 @@ package io.github.chelin1974.daikinhome.web;
 
 import io.github.chelin1974.daikinhome.BridgeSettings;
 import io.github.chelin1974.daikinhome.DaikinHomeBridge;
+import io.github.chelin1974.daikinhome.Failures;
 import io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinAuthException;
 import jakarta.annotation.PreDestroy;
 import java.util.concurrent.Executors;
@@ -85,11 +86,15 @@ public class BridgeLifecycle {
       status.permanent(e.getMessage());
       log.error("not retrying: {}", e.getMessage());
     } catch (Exception e) {
-      status.recoverable(e.getMessage());
+      // The whole cause chain, not just the outermost message: the wrapper names the
+      // operation ("could not save HomeKit pairing state to /data/...") and only the cause
+      // says whether that was a full disk or an unwritable volume.
+      String reason = Failures.describe(e);
+      status.recoverable(reason);
       log.warn(
           "could not start the HomeKit bridge, retrying in {}s: {}",
           settings.pollInterval().toSeconds(),
-          e.getMessage());
+          reason);
       scheduleRetry();
     }
   }

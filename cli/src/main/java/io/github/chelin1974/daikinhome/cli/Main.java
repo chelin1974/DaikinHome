@@ -3,6 +3,7 @@ package io.github.chelin1974.daikinhome.cli;
 import io.github.chelin1974.daikinhome.BridgeSettings;
 import io.github.chelin1974.daikinhome.BridgeSettings.SettingsException;
 import io.github.chelin1974.daikinhome.DaikinHomeBridge;
+import io.github.chelin1974.daikinhome.Failures;
 import io.github.chelin1974.daikinhome.JsonConfig;
 import io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinAuthException;
 import java.nio.file.Path;
@@ -84,7 +85,9 @@ public final class Main {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     } catch (Exception e) {
-      log.error("failed to start: {}", e.getMessage(), e);
+      // The whole cause chain: the outermost message names the operation, the cause names
+      // the fault, and only the two together say what to do about it.
+      log.error("failed to start: {}", Failures.describe(e), e);
       System.exit(1);
     }
   }
