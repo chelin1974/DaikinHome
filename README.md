@@ -65,7 +65,7 @@ Same bridge, same behaviour. Pick by what you need around it.
 | | **CLI** (`cli/`) | **Spring Boot service** (`web/`) |
 | --- | --- | --- |
 | Jar | `cli/target/daikin-home.jar` (~9 MB) | `web/target/daikin-home-web.jar` (~32 MB) |
-| Config | a JSON file | `application.yml`, env vars, CLI args |
+| Config | a JSON file | the same JSON file, or `application.yml`, env vars, CLI args |
 | HomeKit | yes | yes |
 | REST API | — | yes |
 | Health checks / metrics | — | `/actuator/health` |
@@ -89,9 +89,11 @@ Everything works with Siri and with Home automations.
 
 ## Requirements
 
-- **Java 21 or newer**: `brew install openjdk@21` on a Mac,
-  `sudo apt install openjdk-21-jre-headless` on Debian or Ubuntu. Maven to build
-  (`brew install maven`, `sudo apt install maven`).
+- **Java 27**: `brew install openjdk@27` on a Mac, `sudo apt install openjdk-27-jre-headless`
+  on Debian or Ubuntu. Maven to build (`brew install maven`, `sudo apt install maven`). The
+  build targets 27, so an older JDK will not compile it. Note that 27 is a six-month release
+  rather than an LTS — it is superseded by 28 in March 2027. The Docker image bundles its own
+  JDK, so the container needs nothing installed here.
 - **A machine that stays on**, on the same LAN as your Home hub — a Raspberry Pi, a NAS, a
   spare Mac. HomeKit finds the bridge over mDNS, so it has to be on the same network segment
   as your Apple TV or HomePod. Don't put it behind Docker's default bridge network unless
@@ -325,9 +327,17 @@ and `deploy/k8s/` holds Kubernetes manifests. Images are published to
 `ghcr.io/chelin1974/daikin-home` by `.github/workflows/image.yml` for amd64 and arm64.
 
 ```bash
-docker compose up -d                        # needs a .env with your credentials
+docker compose up -d                        # reads your daikin.config.json
 kubectl apply -k deploy/k8s                 # then create the Secret - see deploy/k8s/README.md
 ```
+
+`compose.yaml` mounts `daikin.config.json` read-only at `/config/daikin.config.json` and
+points the service at it with `DAIKIN_CONFIG_FILE`, so Docker and the CLI read the same file
+and there is no second copy of your credentials to keep in step. Any one setting can still
+be overridden with a `DAIKIN_*` environment variable, which wins over the file — that is how
+the compose file forces the pairing state onto the volume whatever `storagePath` says.
+Kubernetes goes the other way and configures everything through those variables, from a
+Secret, which `deploy/k8s/create-secret.sh` builds from the same JSON.
 
 **One thing decides the shape of all of it: HomeKit needs mDNS multicast on your LAN, and
 a container on a bridge or overlay network cannot do multicast.** Discovery and resolution
@@ -391,18 +401,33 @@ Boot service takes the same settings under `daikin.*`; see below.)
 ## Run: Spring Boot service
 
 ```bash
-# SkyportHome account
-DAIKIN_BACKEND=skyport DAIKIN_EMAIL=you@example.com DAIKIN_PASSWORD=... \
+# The daikin.config.json in the working directory, same as the CLI reads
+java -jar web/target/daikin-home-web.jar
+
+# Or a file somewhere else
+DAIKIN_CONFIG_FILE=/etc/daikin-home/daikin.config.json \
   java -jar web/target/daikin-home-web.jar
 
-# Open API
-DAIKIN_API_KEY=... DAIKIN_EMAIL=you@example.com DAIKIN_INTEGRATOR_TOKEN=... \
+# Or no file at all - environment variables on their own are enough
+DAIKIN_BACKEND=skyport DAIKIN_EMAIL=you@example.com DAIKIN_PASSWORD=... \
   java -jar web/target/daikin-home-web.jar
 ```
 
-Everything the CLI does, plus an HTTP API on port 8080. Configuration comes from
-`application.yml`, environment variables, or command-line arguments — Spring's usual
-precedence — under the `daikin.*` prefix:
+Everything the CLI does, plus an HTTP API on port 8080.
+
+Configuration comes from four places, highest precedence first: command-line arguments,
+environment variables, `daikin.config.json`, then the defaults in `application.yml`. The
+config file is looked for in the working directory, or wherever `DAIKIN_CONFIG_FILE` points;
+if it isn't there and you didn't ask for one, it is simply skipped, so environment variables
+alone remain a complete way to configure the service — which is what the Kubernetes
+manifests do. Naming a file that then doesn't exist *is* an error, since it can only be a
+mistake.
+
+That ordering is the useful part: the file holds your settings once, and a deployment
+overrides individual ones without the file being rewritten per environment.
+
+Under the hood these are Spring properties under the `daikin.*` prefix, so `application.yml`
+works too:
 
 ```yaml
 daikin:

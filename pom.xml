@@ -25,7 +25,12 @@
   </modules>
 
   <properties>
-    <maven.compiler.release>21</maven.compiler.release>
+    <!--
+      Java 27. Not an LTS - it is a six-month release, superseded by 28 in March 2027 - so
+      this tracks the current JDK rather than a long-supported one, by choice. The CI
+      workflow and the container image are on the same version; keep all three in step.
+    -->
+    <maven.compiler.release>27</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <!--
       Keeps parameter names in the bytecode. Spring needs them to bind @PathVariable and

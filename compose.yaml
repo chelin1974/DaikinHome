@@ -5,11 +5,13 @@
 #
 # Prometheus and Grafana for history are in compose.history.yaml.
 #
-# Credentials come from a .env file next to this one:
+# Settings come from the daikin.config.json next to this file - the same file the CLI reads,
+# so there is nothing to write out twice. Copy daikin.config.example.json (Open API) or
+# daikin.config.skyport.example.json (SkyportHome) to daikin.config.json and fill it in.
 #
-#   DAIKIN_BACKEND=skyport
-#   DAIKIN_EMAIL=you@example.com
-#   DAIKIN_PASSWORD=...
+# Any single setting can still be overridden per-deployment with a DAIKIN_* environment
+# variable, which wins over the file; that is how DAIKIN_STORAGE_PATH below points the
+# pairing state at the volume whatever the file says.
 #
 services:
   daikin-home:
@@ -27,9 +29,11 @@ services:
     # LAN, so this will not work there. Run it on the Linux box that is on your network.
     network_mode: host
 
-    env_file:
-      - .env
     environment:
+      DAIKIN_CONFIG_FILE: /config/daikin.config.json
+      # Wins over whatever storagePath the config file has: inside the container the state
+      # belongs on the volume, and a path from your laptop would put it on the writable
+      # layer, losing every pairing on the next recreate.
       DAIKIN_STORAGE_PATH: /data/daikin-home.state.json
       # Set this to the host's LAN IP if the Home app cannot find the bridge - the
       # auto-pick can choose an interface your iPhone cannot reach.
@@ -39,6 +43,9 @@ services:
       # DAIKIN_PROMETHEUS_URL: http://localhost:9090
 
     volumes:
+      # Read-only: the bridge only reads it, and this keeps your credentials out of the
+      # image and out of the container's writable layer.
+      - ./daikin.config.json:/config/daikin.config.json:ro
       # HomeKit pairing state. Losing this un-pairs every controller.
       - daikin-state:/data
 

@@ -3,6 +3,9 @@ target/
 
 # Local credentials and HomeKit pairing state - never commit these.
 daikin.config.json
+# Not used by compose.yaml any more, but Docker Compose still auto-loads it for variable
+# substitution, so keep it out of git in case one is ever created.
+.env
 *.state.json
 daikin-home.state.json
 
