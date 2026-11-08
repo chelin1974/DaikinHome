@@ -6,10 +6,12 @@ import io.github.chelin1974.daikinhome.daikin.DaikinDeviceSummary;
 import io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinAuthException;
 import io.github.chelin1974.daikinhome.homekit.DaikinThermostat;
 import io.github.chelin1974.daikinhome.homekit.FileAuthInfo;
+import io.github.chelin1974.daikinhome.homekit.MdnsWatchdog;
 import io.github.chelin1974.daikinhome.homekit.OutdoorTemperatureSensor;
 import io.github.hapjava.server.HomekitAccessoryCategories;
 import io.github.hapjava.server.impl.HomekitRoot;
 import io.github.hapjava.server.impl.HomekitServer;
+import javax.jmdns.JmDNS;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.ArrayList;
@@ -22,6 +24,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,6 +62,9 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
   private HomekitServer server;
   private HomekitRoot bridge;
   private FileAuthInfo authInfo;
+  private MdnsWatchdog mdnsWatchdog;
+  private JmDNS jmdns;
+  private volatile Consumer<String> advertisementFailureListener = reason -> {};
   private io.github.chelin1974.daikinhome.metrics.OtlpExporter exporter;
   private volatile boolean running;
   private volatile boolean shuttingDown;
@@ -102,7 +108,13 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
               + " \"bindAddress\" to this machine's LAN IP.",
           address.getHostAddress());
     }
-    server = new HomekitServer(address, settings.port());
+    // The bridge creates the JmDNS instance itself rather than letting HAP-Java do it:
+    // a delegate - the callback that fires when JmDNS gives up recovering - can only be
+    // installed on an instance we hold. HomekitServer(JmDNS, port) then advertises
+    // through it and binds HTTP to jmdns.getInetAddress(), which is this same address.
+    mdnsWatchdog = new MdnsWatchdog(address, this::onAdvertisementDead);
+    jmdns = mdnsWatchdog.createJmDns(address);
+    server = new HomekitServer(jmdns, settings.port());
     bridge =
         server.createBridge(
             authInfo,
@@ -167,6 +179,8 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
       log.info("");
     }
 
+    mdnsWatchdog.schedule(scheduler, MdnsWatchdog.DEFAULT_PROBE_INTERVAL);
+
     scheduler.scheduleWithFixedDelay(
         this::refreshAll,
         settings.pollInterval().toSeconds(),
@@ -202,12 +216,23 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
       exporter.close();
     }
     thermostats.values().forEach(DaikinThermostat::dispose);
+    if (mdnsWatchdog != null) {
+      mdnsWatchdog.stop();
+    }
     scheduler.shutdownNow();
     if (bridge != null) {
       bridge.stop();
     }
     if (server != null) {
       server.stop();
+    }
+    if (jmdns != null) {
+      try {
+        // Ours to close, since start() created it.
+        jmdns.close();
+      } catch (IOException e) {
+        log.debug("could not close JmDNS cleanly: {}", e.getMessage());
+      }
     }
     terminated.countDown();
   }
@@ -222,6 +247,38 @@ public final class DaikinHomeBridge implements ThermostatGateway, AutoCloseable 
   @Override
   public boolean isRunning() {
     return running;
+  }
+
+  /**
+   * Why Apple Home can no longer reach this bridge, or empty while it still can.
+   *
+   * <p>Separate from {@link #isRunning()} on purpose. A bridge whose mDNS responder has
+   * died is still running - still polling, still serving HTTP - and still completely
+   * invisible to HomeKit. Treating those as one flag is what let the failure go unnoticed.
+   */
+  @Override
+  public Optional<String> advertisementFailure() {
+    return mdnsWatchdog == null ? Optional.empty() : mdnsWatchdog.deadReason();
+  }
+
+  /**
+   * Called once if the HomeKit advertisement dies.
+   *
+   * <p>The bridge keeps serving either way, so that the reason stays readable; it is for
+   * the caller to decide what to do about it. The Spring front end marks the application's
+   * liveness BROKEN so a Kubernetes probe restarts the pod; the CLI exits non-zero so
+   * systemd does.
+   */
+  public void onAdvertisementFailure(Consumer<String> listener) {
+    this.advertisementFailureListener = listener == null ? reason -> {} : listener;
+  }
+
+  private void onAdvertisementDead(String reason) {
+    try {
+      advertisementFailureListener.accept(reason);
+    } catch (RuntimeException e) {
+      log.warn("the advertisement-failure listener failed: {}", e.getMessage());
+    }
   }
 
   @Override

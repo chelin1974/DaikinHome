@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: daikin-home
+
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  # Needs an ingress controller. Remove this line if you do not run one - with
+  # hostNetwork the API is already on the node's address.
+  - ingress.yaml
+
+commonLabels:
+  app.kubernetes.io/name: daikin-home
+  app.kubernetes.io/part-of: home-bridges
+
+images:
+  - name: ghcr.io/chelin1974/daikin-home
+    newTag: latest
+
+# secret.example.yaml is deliberately NOT listed: create the real Secret with
+# `kubectl create secret` so credentials stay out of git. See that file for the command.

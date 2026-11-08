@@ -1,0 +1,34 @@
+# Optional: a hostname for the REST API instead of <node-ip>:8080.
+#
+# Skip this file entirely if you do not run an ingress controller - with hostNetwork the
+# API is already served on the node's own address. Delete it from kustomization.yaml if
+# so, or `kubectl apply` will create an Ingress nothing serves.
+#
+# Set the host to a name your DNS (or /etc/hosts) resolves to the ingress controller, and
+# ingressClassName to your controller (nginx, traefik, ...).
+#
+# There is no authentication in front of this. The REST API can turn your heating off, so
+# keep the hostname internal to your LAN, and consider adding your controller's basic-auth
+# annotations below.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: daikin-home
+  labels:
+    app.kubernetes.io/name: daikin-home
+  # annotations:
+  #   nginx.ingress.kubernetes.io/auth-type: basic
+  #   nginx.ingress.kubernetes.io/auth-secret: daikin-home-basic-auth
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: daikin.home.arpa
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: daikin-home
+                port:
+                  name: http

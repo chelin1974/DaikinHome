@@ -32,6 +32,35 @@ class DaikinHealthIndicatorTest {
   }
 
   @Test
+  @DisplayName("is DOWN when the mDNS advertisement has died, even though the bridge runs")
+  void deadAdvertisementIsUnhealthy() {
+    FakeGateway gateway = new FakeGateway();
+    gateway.running = true;
+    gateway.paired = true;
+    gateway.advertisementFailure = "JmDNS gave up recovering its mDNS responder";
+
+    Health health = new DaikinHealthIndicator(gateway, new BridgeStatus()).health();
+
+    // The whole point of the change: running and healthy are not the same thing. A bridge
+    // whose responder has died serves HTTP perfectly and is invisible to Apple Home.
+    assertThat(health.getStatus()).isEqualTo(Status.DOWN);
+    assertThat(health.getDetails())
+        .containsEntry("running", true)
+        .containsEntry("discoverable", false)
+        .containsEntry("advertisementError", "JmDNS gave up recovering its mDNS responder");
+  }
+
+  @Test
+  @DisplayName("reports discoverable while the advertisement is alive")
+  void liveAdvertisementIsReported() {
+    Health health = new DaikinHealthIndicator(new FakeGateway(), new BridgeStatus()).health();
+
+    assertThat(health.getStatus()).isEqualTo(Status.UP);
+    assertThat(health.getDetails()).containsEntry("discoverable", true);
+    assertThat(health.getDetails()).doesNotContainKey("advertisementError");
+  }
+
+  @Test
   @DisplayName("is DOWN with the reason when the bridge never started")
   void downWithReason() {
     FakeGateway gateway = new FakeGateway();

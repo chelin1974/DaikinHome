@@ -24,13 +24,24 @@ public class DaikinHealthIndicator implements HealthIndicator {
 
   @Override
   public Health health() {
-    Health.Builder health = gateway.isRunning() ? Health.up() : Health.down();
+    // A dead mDNS advertisement is as fatal as a bridge that never started: the thermostat
+    // is unreachable from Apple Home either way. It is reported separately because the two
+    // need different remedies - one is "wait for Daikin", the other is "restart me".
+    String advertisementFailure = gateway.advertisementFailure().orElse(null);
+    boolean healthy = gateway.isRunning() && advertisementFailure == null;
+
+    Health.Builder health = healthy ? Health.up() : Health.down();
 
     health
         .withDetail("running", gateway.isRunning())
         .withDetail("paired", gateway.isPaired())
         .withDetail("thermostats", gateway.devices().size())
-        .withDetail("homekitPort", gateway.settings().port());
+        .withDetail("homekitPort", gateway.settings().port())
+        .withDetail("discoverable", advertisementFailure == null);
+
+    if (advertisementFailure != null) {
+      health.withDetail("advertisementError", advertisementFailure);
+    }
 
     if (status.lastError() != null) {
       health.withDetail("error", status.lastError());

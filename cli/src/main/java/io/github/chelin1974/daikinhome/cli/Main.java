@@ -62,6 +62,16 @@ public final class Main {
       DaikinHomeBridge bridge = new DaikinHomeBridge(settings);
       Runtime.getRuntime().addShutdownHook(new Thread(bridge::stop, "daikin-home-shutdown"));
 
+      // If the mDNS responder dies the bridge is invisible to Apple Home and JmDNS will
+      // not recover, so the only fix is a fresh process. Exit non-zero and let the
+      // supervisor restart us - daikin-home.service sets Restart=on-failure. Run by hand
+      // without a supervisor, this stops instead of pretending to work.
+      bridge.onAdvertisementFailure(
+          reason -> {
+            log.error("exiting so the service manager restarts the bridge: {}", reason);
+            System.exit(70);
+          });
+
       bridge.start();
       bridge.awaitTermination();
     } catch (SettingsException e) {

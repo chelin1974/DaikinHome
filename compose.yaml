@@ -1,0 +1,51 @@
+# Plain Docker, without Kubernetes.
+#
+#   docker compose up -d
+#   docker compose logs -f        # the HomeKit setup code is printed at startup
+#
+# Credentials come from a .env file next to this one:
+#
+#   DAIKIN_BACKEND=skyport
+#   DAIKIN_EMAIL=you@example.com
+#   DAIKIN_PASSWORD=...
+#
+services:
+  daikin-home:
+    build: .
+    image: ghcr.io/chelin1974/daikin-home:latest
+    container_name: daikin-home
+    restart: unless-stopped
+
+    # Required, not optional. HomeKit discovery is mDNS multicast on the local link, and
+    # a container on Docker's bridge network can neither send nor receive it - the Home
+    # app would simply never find the bridge. Host networking also means the REST API is
+    # on the host's own port 8080, so there is no `ports:` mapping here.
+    #
+    # On Docker Desktop for Mac or Windows, host networking does not give you the real
+    # LAN, so this will not work there. Run it on the Linux box that is on your network.
+    network_mode: host
+
+    env_file:
+      - .env
+    environment:
+      DAIKIN_STORAGE_PATH: /data/daikin-home.state.json
+      # Set this to the host's LAN IP if the Home app cannot find the bridge - the
+      # auto-pick can choose an interface your iPhone cannot reach.
+      # DAIKIN_BIND_ADDRESS: 192.168.7.10
+
+    volumes:
+      # HomeKit pairing state. Losing this un-pairs every controller.
+      - daikin-state:/data
+
+    healthcheck:
+      # The JVM and HTTP listener only - deliberately not /actuator/health, which reports
+      # DOWN during a Daikin cloud outage and would mark this container unhealthy over a
+      # fault it cannot fix.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /actuator/health/liveness HTTP/1.0\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q 200"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 4
+
+volumes:
+  daikin-state:

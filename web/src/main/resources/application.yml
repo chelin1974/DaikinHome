@@ -40,6 +40,18 @@ management:
   endpoint:
     health:
       show-details: always
+      # Adds /actuator/health/liveness and /actuator/health/readiness. Spring enables
+      # these automatically when it detects Kubernetes; setting it explicitly means the
+      # same probe URLs work under Docker and on bare metal too.
+      #
+      # These groups cover the JVM and the HTTP listener only - not the daikinBridge
+      # indicator. That is deliberate: /actuator/health reports DOWN while the Daikin
+      # cloud is unreachable, so pointing a liveness probe at it would restart the
+      # container in a loop every time Daikin has an outage, and pointing a readiness
+      # probe at it would pull the REST API out of service exactly when you need it to
+      # tell you what is wrong.
+      probes:
+        enabled: true
 
 logging:
   level:

@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: daikin-home
+  labels:
+    app.kubernetes.io/name: daikin-home
+spec:
+  # ClusterIP is enough. Because the pod runs with hostNetwork, the REST API is ALREADY
+  # reachable on the node itself at http://<node-ip>:8080 - no Service required for that.
+  #
+  # This Service exists for the two things the node address does not give you: a stable
+  # name for other things in the cluster (http://daikin-home.daikin-home.svc:8080), and
+  # something for an Ingress to route to.
+  #
+  # Do not change this to type: LoadBalancer expecting it to help HomeKit. HomeKit needs
+  # mDNS on the LAN, which no Service of any type provides - that is what hostNetwork is
+  # for, and the HomeKit port is deliberately not published here.
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: daikin-home
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

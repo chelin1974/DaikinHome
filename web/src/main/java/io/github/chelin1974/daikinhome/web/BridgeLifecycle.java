@@ -46,9 +46,23 @@ public class BridgeLifecycle {
     this.settings = bridge.settings();
   }
 
+  /**
+   * Begins bringing the bridge up, without waiting for it.
+   *
+   * <p>Handed to the executor rather than run inline. {@code bridge.start()} reads every
+   * thermostat before publishing it and then brings up a HomeKit server and an mDNS
+   * responder — seconds of work on a good day, and it can block much longer if the Daikin
+   * cloud is slow or JmDNS cannot reach the network. This method is called from the
+   * {@link ApplicationReadyEvent} chain, and Spring does not mark the application
+   * ACCEPTING_TRAFFIC until every listener has returned, so running it inline leaves
+   * {@code /actuator/health/readiness} reporting OUT_OF_SERVICE while Tomcat is already
+   * answering. Under Kubernetes that holds the pod out of its Service for the whole
+   * window — and a hung start would hold it out for good, hiding the very endpoint that
+   * would explain why.
+   */
   @EventListener(ApplicationReadyEvent.class)
   public void startBridge() {
-    attemptStart();
+    retries.execute(this::attemptStart);
   }
 
   private void attemptStart() {
