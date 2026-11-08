@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ---------------------------------------------------------------- build stage
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.10-eclipse-temurin-27 AS build
 WORKDIR /src
 
 COPY pom.xml ./
@@ -15,7 +15,7 @@ COPY web web
 RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -DskipTests package
 
 # -------------------------------------------------------------- runtime stage
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:27-jre
 
 LABEL org.opencontainers.image.title="Daikin One HomeKit bridge" \
       org.opencontainers.image.description="Daikin One thermostats in Apple Home, with a REST API" \

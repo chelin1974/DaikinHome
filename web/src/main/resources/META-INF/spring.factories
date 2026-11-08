@@ -1,0 +1,5 @@
+# Registers the reader for daikin.config.json, so the service takes its settings from the
+# same file the CLI does. It has to be an EnvironmentPostProcessor rather than a bean: the
+# properties must be on the environment before @ConfigurationProperties is bound.
+org.springframework.boot.EnvironmentPostProcessor=\
+io.github.chelin1974.daikinhome.web.JsonConfigEnvironmentPostProcessor

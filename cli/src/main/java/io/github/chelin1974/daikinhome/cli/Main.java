@@ -3,6 +3,7 @@ package io.github.chelin1974.daikinhome.cli;
 import io.github.chelin1974.daikinhome.BridgeSettings;
 import io.github.chelin1974.daikinhome.BridgeSettings.SettingsException;
 import io.github.chelin1974.daikinhome.DaikinHomeBridge;
+import io.github.chelin1974.daikinhome.JsonConfig;
 import io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinAuthException;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
