@@ -8,6 +8,8 @@ daikin.config.json
 .env
 *.state.json
 daikin-home.state.json
+# What compose.yaml bind-mounts at /data: the pairing state the container writes.
+data/
 
 .idea/
 *.iml

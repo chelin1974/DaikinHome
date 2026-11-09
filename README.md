@@ -327,9 +327,54 @@ and `deploy/k8s/` holds Kubernetes manifests. Images are published to
 `ghcr.io/chelin1974/daikin-home` by `.github/workflows/image.yml` for amd64 and arm64.
 
 ```bash
+mkdir -p data                               # where the pairing state lives
 docker compose up -d                        # reads your daikin.config.json
 kubectl apply -k deploy/k8s                 # then create the Secret - see deploy/k8s/README.md
 ```
+
+### The pairing state is shared with the host
+
+`compose.yaml` bind-mounts `./data` at `/data` and points `DAIKIN_STORAGE_PATH` at
+`/data/daikin-home.state.json`, so the pairing state is an ordinary file you can see, back up
+and reuse. It used to be a named Docker volume, which meant a bridge you had already added to
+the Home app from the command line looked brand new to the container, and you were asked to
+pair it a second time.
+
+**If you paired outside Docker and want the container to keep that pairing**, move the state
+file in before the first `docker compose up`:
+
+```bash
+mkdir -p data
+mv daikin-home.state.json data/              # wherever your CLI run wrote it
+```
+
+**If you already had the container paired on the old named volume**, copy it out rather than
+starting over:
+
+```bash
+docker compose down
+mkdir -p data
+docker run --rm -v daikin-home_daikin-state:/from -v "$PWD/data":/to \
+  alpine cp /from/daikin-home.state.json /to/
+docker compose up -d
+docker volume rm daikin-home_daikin-state   # once you have checked it still pairs
+```
+
+To go the other way — container first, CLI afterwards — point the CLI at the same file with
+`"storagePath": "data/daikin-home.state.json"` in `daikin.config.json`.
+
+Only ever run **one** of them at a time. Two bridges sharing this file both advertise the same
+HomeKit identity and both write the same state, which shows up as accessories flapping to "No
+Response".
+
+On a Linux host the container runs as UID 10001 and the bind-mounted directory has to be
+writable by it, or the bridge reports `Permission denied` on that path:
+
+```bash
+mkdir -p data && sudo chown 10001:10001 data
+```
+
+Docker Desktop on a Mac maps ownership for you, so this is not needed there.
 
 `compose.yaml` mounts `daikin.config.json` read-only at `/config/daikin.config.json` and
 points the service at it with `DAIKIN_CONFIG_FILE`, so Docker and the CLI read the same file
