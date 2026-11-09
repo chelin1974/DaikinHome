@@ -86,8 +86,11 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.hostIP
-            - name: DAIKIN_STORAGE_PATH
-              value: /data/daikin-home.state.json
+            # Every file the bridge writes goes here, on the PVC mounted below. One setting
+            # rather than a path per file, and the same setting the SpanHome and CellGateHome
+            # bridges take.
+            - name: DAIKIN_DATA_DIRECTORY
+              value: /data
 
           # Credentials. See secret.example.yaml.
           envFrom:

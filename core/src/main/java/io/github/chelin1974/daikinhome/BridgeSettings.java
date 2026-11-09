@@ -113,6 +113,12 @@ public record BridgeSettings(
     }
   }
 
+  /** A configured path: absolute as given, relative against {@code base}. */
+  private static Path resolveAgainst(Path base, String configured) {
+    Path path = Path.of(configured);
+    return path.isAbsolute() || base == null ? path : base.resolve(path);
+  }
+
   public static Builder builder() {
     return new Builder();
   }
@@ -165,6 +171,7 @@ public record BridgeSettings(
     private String bridgeName;
     private Integer port;
     private String storagePath;
+    private String dataDirectory;
     private Path storageDirectory;
     private String backend;
     private String password;
@@ -241,6 +248,12 @@ public record BridgeSettings(
 
     public Builder port(Integer value) {
       this.port = value;
+      return this;
+    }
+
+    /** Where every written file lands; relative to the config file, or absolute. */
+    public Builder dataDirectory(String value) {
+      this.dataDirectory = value;
       return this;
     }
 
@@ -349,15 +362,22 @@ public record BridgeSettings(
       // file, so "storagePath": "data/daikin-home.state.json" meant two different files
       // depending on which jar you ran - and losing track of that file un-pairs every
       // controller.
+      // Where everything the bridge writes goes. Only the pairing state today, but the same
+      // setting as the SpanHome and CellGateHome bridges, so one answer covers all three and a
+      // second written file later needs no new knob. Relative to the configuration file's
+      // directory, or absolute; unset it is that directory, so nothing moves for an existing
+      // setup.
+      Path data =
+          isBlank(dataDirectory)
+              ? storageDirectory
+              : resolveAgainst(storageDirectory, dataDirectory.trim());
+
       Path storage;
       if (!isBlank(storagePath)) {
         Path configured = Path.of(storagePath.trim());
-        storage =
-            configured.isAbsolute() || storageDirectory == null
-                ? configured
-                : storageDirectory.resolve(configured);
-      } else if (storageDirectory != null) {
-        storage = storageDirectory.resolve(DEFAULT_STATE_FILE);
+        storage = configured.isAbsolute() || data == null ? configured : data.resolve(configured);
+      } else if (data != null) {
+        storage = data.resolve(DEFAULT_STATE_FILE);
       } else {
         storage = Path.of(DEFAULT_STATE_FILE);
       }

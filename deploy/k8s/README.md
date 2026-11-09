@@ -122,7 +122,7 @@ locally, the helper script reads it and creates the Secret for you:
 ```
 
 It translates each setting to the environment variable Spring binds it to, skips the
-example file's `_comment` keys and any empty values, and skips `storagePath` and
+example file's `_comment` keys and any empty values, and skips `dataDirectory`, `storagePath` and
 `bindAddress` — the Deployment supplies those itself, correctly for the cluster, and a
 value from your laptop would override both with something wrong. It validates the same
 rules the bridge does, so a half-filled config fails here with an explanation rather than

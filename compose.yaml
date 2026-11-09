@@ -10,8 +10,8 @@
 # daikin.config.skyport.example.json (SkyportHome) to daikin.config.json and fill it in.
 #
 # Any single setting can still be overridden per-deployment with a DAIKIN_* environment
-# variable, which wins over the file; that is how DAIKIN_STORAGE_PATH below points the
-# pairing state at the volume whatever the file says.
+# variable, which wins over the file; that is how DAIKIN_DATA_DIRECTORY below puts every file
+# the bridge writes on the volume, whatever the config file says.
 #
 services:
   daikin-home:
@@ -31,10 +31,10 @@ services:
 
     environment:
       DAIKIN_CONFIG_FILE: /config/daikin.config.json
-      # Wins over whatever storagePath the config file has: inside the container the state
-      # belongs on the volume, and a path from your laptop would put it on the writable
-      # layer, losing every pairing on the next recreate.
-      DAIKIN_STORAGE_PATH: /data/daikin-home.state.json
+      # Every file the bridge writes goes here, on the bind mount below. Set explicitly rather
+      # than left to default to the config file's directory, which is the read-only /config
+      # mount - so this is what guarantees the pairing state is on the volume.
+      DAIKIN_DATA_DIRECTORY: /data
       # Set this to the host's LAN IP if the Home app cannot find the bridge - the
       # auto-pick can choose an interface your iPhone cannot reach.
       # DAIKIN_BIND_ADDRESS: 192.168.7.10

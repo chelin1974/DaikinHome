@@ -95,7 +95,10 @@ class JsonConfigPropertiesTest {
                 }
                 """));
 
-    assertEquals(Map.of("daikin.email", "you@example.com"), properties);
+    // data-directory is always emitted - see readAsProperties - so compare the rest.
+    Map<String, Object> withoutDataDirectory = new java.util.LinkedHashMap<>(properties);
+    withoutDataDirectory.remove("daikin.data-directory");
+    assertEquals(Map.of("daikin.email", "you@example.com"), withoutDataDirectory);
   }
 
   /** The example files carry their own commentary under keys Jackson should ignore. */
@@ -105,7 +108,9 @@ class JsonConfigPropertiesTest {
         JsonConfig.readAsProperties(
             write("{\"_comment\": \"copy me\", \"email\": \"you@example.com\"}"));
 
-    assertEquals(Map.of("daikin.email", "you@example.com"), properties);
+    Map<String, Object> withoutDataDirectory = new java.util.LinkedHashMap<>(properties);
+    withoutDataDirectory.remove("daikin.data-directory");
+    assertEquals(Map.of("daikin.email", "you@example.com"), withoutDataDirectory);
   }
 
   @Test
@@ -116,15 +121,32 @@ class JsonConfigPropertiesTest {
     assertEquals("you@example.com", properties.get("daikin.email"));
   }
 
-  /** Same rule as {@link JsonConfig#load(Path)}: relative to the file, not the process. */
+  /**
+   * Same rule as {@link JsonConfig#load(Path)}: relative to the file, not the process.
+   *
+   * <p>Asserted on where the file ends up rather than on the property, because the property is
+   * now left relative on purpose and resolved once, against the data directory, in
+   * BridgeSettings - so that a relative storagePath cannot bypass the data directory.
+   */
   @Test
   void resolvesRelativeStoragePathAgainstTheFilesDirectory() throws IOException {
     Path file = write("{\"storagePath\": \"state/daikin.json\"}");
 
     Map<String, Object> properties = JsonConfig.readAsProperties(file);
 
+    assertEquals("state/daikin.json", properties.get("daikin.storage-path"));
+    assertEquals(directory.toString(), properties.get("daikin.data-directory"));
+
+    // End to end: the two together put the file beside the config, as the CLI does.
     assertEquals(
-        directory.resolve("state/daikin.json").toString(), properties.get("daikin.storage-path"));
+        directory.resolve("state/daikin.json"),
+        BridgeSettings.builder()
+            .email("a@b.com")
+            .password("x")
+            .dataDirectory((String) properties.get("daikin.data-directory"))
+            .storagePath((String) properties.get("daikin.storage-path"))
+            .build()
+            .storagePath());
   }
 
   @Test

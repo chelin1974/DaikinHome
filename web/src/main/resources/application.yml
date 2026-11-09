@@ -22,6 +22,10 @@ daikin:
   homekit-port: 51826
   # LAN IP to advertise HomeKit on. Blank picks one; set it if the Home app can't find the bridge.
   bind-address: ${DAIKIN_BIND_ADDRESS:}
+  # Where everything the bridge writes goes; relative to the config file, or absolute. The
+  # same setting as the SpanHome and CellGateHome bridges. Blank is the config file's own
+  # directory. The container sets this to /data, the mounted volume.
+  data-directory: ${DAIKIN_DATA_DIRECTORY:}
   # HomeKit pairing state. Back this file up; losing it un-pairs every controller.
   storage-path: daikin-home.state.json
   # Prometheus 3 base URL (started with --web.enable-otlp-receiver). Readings go to it as

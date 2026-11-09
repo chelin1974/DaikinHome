@@ -60,6 +60,7 @@ public final class JsonConfig {
     public Boolean showOutdoorTemperatureSensor;
     public String bridgeName;
     public Integer port;
+    public String dataDirectory;
     public String storagePath;
     public String prometheusUrl;
     public String otlpEndpoint;
@@ -86,6 +87,7 @@ public final class JsonConfig {
         .showOutdoorTemperatureSensor(raw.showOutdoorTemperatureSensor)
         .bridgeName(raw.bridgeName)
         .port(raw.port)
+        .dataDirectory(raw.dataDirectory)
         .storagePath(raw.storagePath)
         .prometheusUrl(raw.prometheusUrl)
         .otlpEndpoint(raw.otlpEndpoint)
@@ -142,17 +144,29 @@ public final class JsonConfig {
     put(properties, "otlp-endpoint", raw.otlpEndpoint);
     put(properties, "metrics-interval-seconds", raw.metricsIntervalSeconds);
 
-    if (raw.storagePath != null && !raw.storagePath.isBlank()) {
-      Path storage = Path.of(raw.storagePath.strip());
-      put(
-          properties,
-          "storage-path",
-          storage.isAbsolute() || directory == null
-              ? storage.toString()
-              : directory.resolve(storage).toString());
+    // The data directory is always emitted, and always absolute. The service has no notion of
+    // "the configuration file's directory" - it is handed properties, not a file - so resolving
+    // it here is what makes the service land its files in the same place the CLI does.
+    //
+    // storagePath is then passed through untouched, so BridgeSettings resolves it against that
+    // directory exactly as it does for the CLI. Pre-resolving it here, as this used to, would
+    // have quietly bypassed the data directory for anyone with a relative storagePath.
+    Path data =
+        raw.dataDirectory == null || raw.dataDirectory.isBlank()
+            ? directory
+            : resolve(directory, raw.dataDirectory.strip());
+    if (data != null) {
+      put(properties, "data-directory", data.toString());
     }
+    put(properties, "storage-path", raw.storagePath);
 
     return properties;
+  }
+
+  /** A configured path: absolute as given, relative against {@code base}. */
+  private static Path resolve(Path base, String configured) {
+    Path path = Path.of(configured);
+    return path.isAbsolute() || base == null ? path : base.resolve(path);
   }
 
   private static void put(Map<String, Object> properties, String name, Object value) {
