@@ -64,6 +64,14 @@ public class DaikinProperties {
    */
   private Integer homekitPort;
 
+  /**
+   * Where everything the bridge writes goes; relative to the config file, or absolute.
+   *
+   * <p>The same setting as the SpanHome and CellGateHome bridges. Unset, it is the config
+   * file's own directory.
+   */
+  private String dataDirectory;
+
   /** Where HomeKit pairing state is stored. Back this file up. */
   private String storagePath;
 
@@ -92,6 +100,7 @@ public class DaikinProperties {
         .showOutdoorTemperatureSensor(showOutdoorTemperatureSensor)
         .bridgeName(bridgeName)
         .port(homekitPort)
+        .dataDirectory(dataDirectory)
         .storagePath(storagePath)
         .prometheusUrl(prometheusUrl)
         .otlpEndpoint(otlpEndpoint)
@@ -201,6 +210,14 @@ public class DaikinProperties {
 
   public void setHomekitPort(Integer homekitPort) {
     this.homekitPort = homekitPort;
+  }
+
+  public String getDataDirectory() {
+    return dataDirectory;
+  }
+
+  public void setDataDirectory(String dataDirectory) {
+    this.dataDirectory = dataDirectory;
   }
 
   public String getStoragePath() {

@@ -32,9 +32,10 @@ usage: create-secret.sh [options]
   --dry-run            print the keys that would be set, and exit
   --help               show this message
 
-Settings the Deployment supplies itself - storagePath and bindAddress - are skipped on
-purpose: it points storagePath at the mounted volume and takes bindAddress from the node's
-own address, and a value here would override both with something wrong for the cluster.
+Settings the Deployment supplies itself - dataDirectory, storagePath and bindAddress - are
+skipped on purpose: it points dataDirectory at the mounted volume and takes bindAddress from
+the node's own address, and a value here would override those with something wrong for the
+cluster.
 USAGE
 }
 
@@ -86,7 +87,7 @@ if not isinstance(config, dict):
 
 # The Deployment sets these itself, correctly for the cluster; a value from a local config
 # file would point the bridge at a path or an interface that does not exist in the pod.
-SKIP = {"storagePath", "bindAddress"}
+SKIP = {"dataDirectory", "storagePath", "bindAddress"}
 
 # The only name that is not a straight camelCase-to-SNAKE_CASE translation: the config
 # file calls it "port", but the service distinguishes it from the HTTP port.
