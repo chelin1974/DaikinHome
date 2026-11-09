@@ -54,6 +54,9 @@ public class JsonConfigEnvironmentPostProcessor implements EnvironmentPostProces
 
   static final String PROPERTY_SOURCE_NAME = "daikinConfigJson";
 
+  /** Set to the file that was read, for {@code StartupSummary} to report. */
+  static final String CONFIG_FILE_USED = "daikin.config-file-used";
+
   @Override
   public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication app) {
     addPropertySource(environment);
@@ -75,10 +78,16 @@ public class JsonConfigEnvironmentPostProcessor implements EnvironmentPostProces
       return;
     }
 
-    Map<String, Object> properties = JsonConfig.readAsProperties(file);
+    Map<String, Object> properties = new java.util.LinkedHashMap<>(JsonConfig.readAsProperties(file));
     if (properties.isEmpty()) {
       return;
     }
+
+    // Records which file was actually read, so startup can say so. An EnvironmentPostProcessor
+    // runs before logging is configured, so it cannot log this itself - and without it there is
+    // no way to tell from the logs whether the service picked up the file you meant, which is
+    // the first thing you want to know when it rejects your credentials.
+    properties.put(CONFIG_FILE_USED, file.toAbsolutePath().toString());
 
     // Just below the environment variables, so DAIKIN_* still wins, and above
     // application.yml, so the file beats the built-in defaults.
