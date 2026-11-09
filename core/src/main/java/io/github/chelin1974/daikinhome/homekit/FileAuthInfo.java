@@ -207,7 +207,8 @@ public final class FileAuthInfo implements HomekitAuthInfo {
       temporary = Files.createTempFile(parent, ".daikin-home.state", ".tmp");
       Files.writeString(temporary, document);
       restrictPermissions(temporary);
-      Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+      Files.move(
+          temporary, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
       temporary = null;
     } catch (IOException e) {
       throw new UncheckedIOException("could not save HomeKit pairing state to " + file, e);
