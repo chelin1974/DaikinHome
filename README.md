@@ -141,8 +141,11 @@ This builds both jars: `cli/target/daikin-home.jar` and `web/target/daikin-home-
 **2. Configure.** Copy the example for your backend and fill in your credentials:
 
 ```bash
-cp daikin.config.skyport.example.json daikin.config.json   # SkyportHome account
-cp daikin.config.example.json daikin.config.json           # or: Open API
+# -n never overwrites an existing config. Without it, re-running this on a machine that is
+# already set up replaces your real credentials with the example's placeholders - which the
+# Daikin API then rejects with HTTP 403.
+cp -n daikin.config.skyport.example.json daikin.config.json   # SkyportHome account
+cp -n daikin.config.example.json daikin.config.json           # or: Open API
 chmod 600 daikin.config.json
 $EDITOR daikin.config.json
 ```
