@@ -46,14 +46,18 @@ services:
       # Read-only: the bridge only reads it, and this keeps your credentials out of the
       # image and out of the container's writable layer.
       - ./daikin.config.json:/config/daikin.config.json:ro
-      # HomeKit pairing state. Losing this un-pairs every controller.
-      - daikin-state:/data
+      # HomeKit pairing state, on a bind mount rather than a named volume so it is an
+      # ordinary file you can see, back up, and share with a run outside Docker. A named
+      # volume kept it inside Docker's own storage, which meant a bridge already paired from
+      # the command line looked brand new to the container, and the Home app was asked to
+      # pair all over again. Losing this file un-pairs every controller.
+      - ./data:/data
 
     # Tomcat insists on a writable temp dir and refuses to start without one: "Unable to
     # create tempDir. java.io.tmpdir is set to /tmp". On the container's writable layer that
     # is a disk write, so a full Docker disk stopped the bridge booting at all. In RAM it
     # cannot fill up with anything else, and the few KB Tomcat puts there are scratch - the
-    # pairing state lives on the volume above, not here. The Kubernetes manifests mount an
+    # pairing state lives on the bind mount above, not here. The Kubernetes manifests mount an
     # emptyDir at /tmp for the same reason.
     tmpfs:
       - /tmp:size=64m
@@ -67,6 +71,3 @@ services:
       timeout: 5s
       start_period: 90s
       retries: 4
-
-volumes:
-  daikin-state:
