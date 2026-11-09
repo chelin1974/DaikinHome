@@ -114,7 +114,7 @@ class BridgeSettingsTest {
   }
 
   @Test
-  @DisplayName("an explicit storage path wins over the directory")
+  @DisplayName("an absolute storage path is taken as given")
   void explicitStoragePathWins(@TempDir Path dir) {
     assertEquals(
         Path.of("/var/lib/daikin/state.json"),
@@ -123,6 +123,32 @@ class BridgeSettingsTest {
             .storagePath("/var/lib/daikin/state.json")
             .build()
             .storagePath());
+  }
+
+  /**
+   * The rule shared with the SpanHome and CellGateHome bridges. It used to resolve against the
+   * process working directory here, which meant the CLI and the Spring service disagreed about
+   * where the state file was for the same config - and losing track of it un-pairs every
+   * controller.
+   */
+  @Test
+  @DisplayName("a relative storage path is resolved against the config file's directory")
+  void relativeStoragePathResolvesAgainstTheConfigDirectory(@TempDir Path dir) {
+    assertEquals(
+        dir.resolve("data/daikin-home.state.json"),
+        credentials()
+            .storageDirectory(dir)
+            .storagePath("data/daikin-home.state.json")
+            .build()
+            .storagePath());
+  }
+
+  @Test
+  @DisplayName("a relative storage path with no directory stays relative")
+  void relativeStoragePathWithoutADirectory() {
+    assertEquals(
+        Path.of("data/daikin-home.state.json"),
+        credentials().storagePath("data/daikin-home.state.json").build().storagePath());
   }
 
   // ------------------------------------------------------------------ backends

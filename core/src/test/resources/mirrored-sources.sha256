@@ -1,0 +1,7 @@
+# Digests of the sources this bridge keeps byte-identical with its sibling bridges.
+# See MirroredSourcesTest. The same digests appear in DaikinHome, SpanHome and
+# CellGateHome; change a mirrored file in one and you must port it and update all three.
+
+FileAuthInfo 36a35a20c1b2bda480d5f5638ac34245b4a8dbd928b9e37fc2c96216c3ba2f22
+MdnsWatchdog 6bf3d9fbb59dd13286715a14700947279f8a03ede441f1ee0ef415e17bd68928
+NetworkAddresses ef0e4e51cf73da7b8e4487493e4d623a58ca6af526c390fab692369cdbeaec94

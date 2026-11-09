@@ -339,9 +339,23 @@ public record BridgeSettings(
         timeout = MIN_REQUEST_TIMEOUT;
       }
 
+      // One rule, shared with the SpanHome and CellGateHome bridges: an absolute storagePath
+      // is taken as given, and a relative one is resolved against the configuration file's
+      // own directory - never the process working directory, which is whatever happened to
+      // launch the bridge and differs between a shell, a systemd unit and a container.
+      //
+      // This also keeps the two flavours of this bridge in step. The CLI resolved a relative
+      // path against the working directory while the service resolved it against the config
+      // file, so "storagePath": "data/daikin-home.state.json" meant two different files
+      // depending on which jar you ran - and losing track of that file un-pairs every
+      // controller.
       Path storage;
       if (!isBlank(storagePath)) {
-        storage = Path.of(storagePath.trim());
+        Path configured = Path.of(storagePath.trim());
+        storage =
+            configured.isAbsolute() || storageDirectory == null
+                ? configured
+                : storageDirectory.resolve(configured);
       } else if (storageDirectory != null) {
         storage = storageDirectory.resolve(DEFAULT_STATE_FILE);
       } else {
