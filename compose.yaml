@@ -30,7 +30,7 @@ services:
     network_mode: host
 
     environment:
-      DAIKIN_CONFIG_FILE: /config/daikin.config.json
+      DAIKIN_CONFIG_FILE: /data/daikin.config.json
       # Every file the bridge writes goes here, on the bind mount below. Set explicitly rather
       # than left to default to the config file's directory, which is the read-only /config
       # mount - so this is what guarantees the pairing state is on the volume.
@@ -43,9 +43,6 @@ services:
       # DAIKIN_PROMETHEUS_URL: http://localhost:9090
 
     volumes:
-      # Read-only: the bridge only reads it, and this keeps your credentials out of the
-      # image and out of the container's writable layer.
-      - ./daikin.config.json:/config/daikin.config.json:ro
       # HomeKit pairing state, on a bind mount rather than a named volume so it is an
       # ordinary file you can see, back up, and share with a run outside Docker. A named
       # volume kept it inside Docker's own storage, which meant a bridge already paired from
