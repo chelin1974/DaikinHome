@@ -47,8 +47,15 @@ import org.springframework.core.env.StandardEnvironment;
  */
 public class JsonConfigEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
-  /** Where the file is looked for when {@code daikin.config-file} is not set. */
-  static final String DEFAULT_CONFIG_FILE = "daikin.config.json";
+  /**
+   * Where the file is looked for, in order, when {@code daikin.config-file} is not set.
+   *
+   * <p>The data directory first, because that is where everything the bridge writes lives and
+   * keeping the configuration with it means one directory to mount into a container and one to
+   * back up. The same order as the SpanHome and CellGateHome bridges.
+   */
+  static final java.util.List<String> DEFAULT_CONFIG_FILES =
+      java.util.List.of("data/daikin.config.json", "daikin.config.json");
 
   static final String CONFIG_FILE_PROPERTY = "daikin.config-file";
 
@@ -71,11 +78,22 @@ public class JsonConfigEnvironmentPostProcessor implements EnvironmentPostProces
 
     String configured = environment.getProperty(CONFIG_FILE_PROPERTY);
     boolean explicit = configured != null && !configured.isBlank();
-    Path file = Path.of(explicit ? configured.strip() : DEFAULT_CONFIG_FILE);
 
-    if (!explicit && !Files.isReadable(file)) {
-      // Nothing to read, and nothing was asked for: environment variables are enough.
-      return;
+    Path file = null;
+    if (explicit) {
+      file = Path.of(configured.strip());
+    } else {
+      for (String candidate : DEFAULT_CONFIG_FILES) {
+        Path path = Path.of(candidate);
+        if (Files.isReadable(path)) {
+          file = path;
+          break;
+        }
+      }
+      if (file == null) {
+        // Nothing to read, and nothing was asked for: environment variables are enough.
+        return;
+      }
     }
 
     Map<String, Object> properties = new java.util.LinkedHashMap<>(JsonConfig.readAsProperties(file));

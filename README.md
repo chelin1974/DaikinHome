@@ -379,13 +379,26 @@ mkdir -p data && sudo chown 10001:10001 data
 
 Docker Desktop on a Mac maps ownership for you, so this is not needed there.
 
-`compose.yaml` mounts `daikin.config.json` read-only at `/config/daikin.config.json` and
-points the service at it with `DAIKIN_CONFIG_FILE`, so Docker and the CLI read the same file
-and there is no second copy of your credentials to keep in step. Any one setting can still
-be overridden with a `DAIKIN_*` environment variable, which wins over the file — that is how
-the compose file forces the pairing state onto the volume whatever `storagePath` says.
-Kubernetes goes the other way and configures everything through those variables, from a
-Secret, which `deploy/k8s/create-secret.sh` builds from the same JSON.
+`compose.yaml` mounts `./data` and nothing else: the configuration lives in it alongside
+everything the bridge writes, which is one directory to mount, one to back up, and one answer
+to "where is my pairing state?". The service is pointed at `/data/daikin.config.json` with
+`DAIKIN_CONFIG_FILE`, and `DAIKIN_DATA_DIRECTORY=/data` says where the written files go rather
+than leaving it to follow the configuration. The SpanHome and CellGateHome bridges are laid out
+the same way.
+
+So put your configuration in `data/`:
+
+```bash
+mkdir -p data
+cp -n daikin.config.example.json data/daikin.config.json   # then fill it in
+```
+
+Run outside Docker against the same copy with `--config data/daikin.config.json`, and the two
+share one configuration and one pairing. Any single setting can still be overridden with a
+`DAIKIN_*` environment variable, which wins over the file.
+
+Kubernetes goes the other way and configures everything through those variables, from a Secret,
+which `deploy/k8s/create-secret.sh` builds from the same JSON.
 
 **One thing decides the shape of all of it: HomeKit needs mDNS multicast on your LAN, and
 a container on a bridge or overlay network cannot do multicast.** Discovery and resolution
