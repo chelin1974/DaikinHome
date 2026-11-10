@@ -68,8 +68,9 @@ Same bridge, same behaviour. Pick by what you need around it.
 | Config | a JSON file | the same JSON file, or `application.yml`, env vars, CLI args |
 | HomeKit | yes | yes |
 | REST API | — | yes |
+| Thermostat Board page | — | yes, on `/` |
 | Health checks / metrics | — | `/actuator/health` |
-| Use it when | you just want the thermostat in Home | you want it reachable from your own automations or monitoring |
+| Use it when | you just want the thermostat in Home | you want a page to look at, or it reachable from your own automations or monitoring |
 
 Both build from the same `core/` module, so a fix in the Daikin client or the HomeKit
 mapping applies to both.
@@ -474,7 +475,7 @@ DAIKIN_BACKEND=skyport DAIKIN_EMAIL=you@example.com DAIKIN_PASSWORD=... \
   java -jar web/target/daikin-home-web.jar
 ```
 
-Everything the CLI does, plus an HTTP API on port 8080.
+Everything the CLI does, plus the Thermostat Board page and an HTTP API on port 8080.
 
 Configuration comes from four places, highest precedence first: command-line arguments,
 environment variables, `daikin.config.json`, then the defaults in `application.yml`. The
@@ -531,16 +532,26 @@ Add `DAIKIN_PROMETHEUS_URL=http://localhost:9090` to the same file to send metri
 | `GET` | `/api/thermostats/{id}` | One thermostat |
 | `PUT` | `/api/thermostats/{id}` | Change mode and/or setpoints |
 | `POST` | `/api/thermostats/{id}/refresh` | Force a read instead of waiting for the next poll |
-| `GET` | `/api/bridge` | HomeKit status: running, paired, setup code |
+| `GET` | `/api/bridge` | HomeKit status: running, paired, setup code, whether a passcode is required |
 | `GET` | `/actuator/health` | Health, including the bridge |
+| `GET` | `/` | The Thermostat Board page |
 
 Modes are strings, not Daikin's integers: `off`, `heat`, `cool`, `auto`, `emergencyHeat`.
 
 ```bash
 curl -X PUT localhost:8080/api/thermostats/{id} \
   -H 'Content-Type: application/json' \
+  -H 'X-Passcode: ...' \
   -d '{"mode":"heat","heatSetpoint":21.5}'
 ```
+
+`X-Passcode` is needed only when `dashboardPasscode` is set, and only on the two routes that
+change something — `PUT /api/thermostats/{id}` and `POST /api/thermostats/{id}/refresh`.
+Reads never ask for it. Five wrong passcodes lock that address out for five minutes.
+
+Unlike SpanHome, which refuses to switch a circuit at all until a passcode is configured,
+this bridge lets writes through when there is none: the REST API shipped before the passcode
+did, and turning it off by default would break scripts already calling it.
 
 Every field of the body is optional. The response is the thermostat's state **after** the
 change, which may not be what you asked for — setpoints are clamped into the thermostat's own
@@ -701,8 +712,12 @@ Gaps specific to this backend:
   but the write behaviour is not verified, so this bridge does not touch them.
 - **No air quality, zoning, or humidifier control.** The One+ reports more than this bridge
   surfaces. Run `--probe`; if your thermostat reports something useful, it's a small addition.
-- **The REST API has no authentication.** It is meant for a trusted LAN. Do not expose port
-  8080 to the internet — anyone who reaches it controls your heating.
+- **On your home network, a passcode is the only thing between a device and your heating.**
+  Port 8080 answers private, link-local and loopback addresses only, so a router that
+  forwards it by mistake is not enough on its own to expose it — but every phone, laptop and
+  smart TV on your LAN is inside that line. Set `dashboardPasscode` to require one for the
+  routes that change something. Unset, as it ships, anything on your network can turn your
+  heating on.
 - **HAP-Java's last release on Maven Central is 2.0.7 (March 2023).** It is stable and in
   production use via openHAB, but it is not moving quickly. Worth knowing before you build on
   it.

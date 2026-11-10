@@ -238,4 +238,44 @@ class JsonConfigPropertiesTest {
     assertEquals("http://localhost:9090", properties.get("daikin.prometheus-url"));
     assertTrue(settings.otlpEndpoint().toString().startsWith("http://localhost:9090"));
   }
+
+  /**
+   * The one setting that is a property but not a {@link BridgeSettings} field: it guards HTTP
+   * routes, and the CLI flavour serves no HTTP. Without the field on {@code Raw},
+   * {@code ignoreUnknown} would drop it and it would work from an environment variable but
+   * not from the configuration file.
+   */
+  @Test
+  void carriesTheDashboardPasscodeWithoutPuttingItInSettings() throws Exception {
+    Path file = Files.createTempDirectory("daikin-passcode").resolve("daikin.config.json");
+    Files.writeString(
+        file,
+        """
+        {
+          "apiKey": "key",
+          "email": "you@example.com",
+          "integratorToken": "token",
+          "dashboardPasscode": "letmein"
+        }
+        """);
+
+    assertEquals("letmein", JsonConfig.readAsProperties(file).get("daikin.dashboard-passcode"));
+  }
+
+  /** Absent, not present and null, so application.yml's own value is left to stand. */
+  @Test
+  void omitsTheDashboardPasscodeWhenTheFileHasNone() throws Exception {
+    Path file = Files.createTempDirectory("daikin-no-passcode").resolve("daikin.config.json");
+    Files.writeString(
+        file,
+        """
+        {
+          "apiKey": "key",
+          "email": "you@example.com",
+          "integratorToken": "token"
+        }
+        """);
+
+    assertFalse(JsonConfig.readAsProperties(file).containsKey("daikin.dashboard-passcode"));
+  }
 }

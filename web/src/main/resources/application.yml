@@ -32,8 +32,15 @@ daikin:
   # OpenTelemetry metrics every metrics-interval-seconds. Blank sends none.
   prometheus-url: ${DAIKIN_PROMETHEUS_URL:}
   metrics-interval-seconds: 60
+  # Household passcode for the routes that change a thermostat, as "dashboardPasscode" in
+  # daikin.config.json. Blank leaves the home network as the only gate, which means anyone
+  # on it can change your thermostats - see PasscodeGuard for why that is the default here
+  # and not in SpanHome.
+  dashboard-passcode: ${DAIKIN_DASHBOARD_PASSCODE:}
 
 server:
+  # The Thermostat Board page, the REST API and actuator health. Not the HomeKit port, which
+  # is daikin.homekit-port above.
   port: 8080
 
 management:
