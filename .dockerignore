@@ -1,13 +1,16 @@
-target/
 **/target/
 
 .git/
 .gitignore
 .github/
 
-# Never bake credentials or pairing state into an image.
-daikin.config.json
-*.state.json
+# Never bake credentials or pairing state into an image. These patterns have to be "**/"
+# rather than bare names: a bare name matches only at the context root, and both files now
+# live in ./data, which the next rule keeps out wholesale. Both are here on purpose, so
+# moving the data directory cannot quietly re-open the hole.
+data/
+**/daikin.config.json
+**/*.state.json
 
 deploy/
 docs/
