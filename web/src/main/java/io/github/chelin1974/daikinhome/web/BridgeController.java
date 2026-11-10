@@ -15,10 +15,13 @@ public class BridgeController {
 
   private final ThermostatGateway gateway;
   private final BridgeStatus status;
+  private final PasscodeGuard guard;
 
-  public BridgeController(ThermostatGateway gateway, BridgeStatus status) {
+  public BridgeController(
+      ThermostatGateway gateway, BridgeStatus status, PasscodeGuard guard) {
     this.gateway = gateway;
     this.status = status;
+    this.guard = guard;
   }
 
   /**
@@ -38,7 +41,10 @@ public class BridgeController {
       // False when the mDNS responder has died: the bridge is running but nothing in
       // Apple Home can reach it.
       boolean discoverable,
-      String advertisementError) {}
+      String advertisementError,
+      // True when a dashboardPasscode is configured, so the page knows whether to ask for
+      // one before it tries to change anything.
+      boolean passcodeRequired) {}
 
   @GetMapping
   public BridgeStatusDto status() {
@@ -54,6 +60,7 @@ public class BridgeController {
         gateway.devices().size(),
         status.lastError(),
         gateway.advertisementFailure().isEmpty(),
-        gateway.advertisementFailure().orElse(null));
+        gateway.advertisementFailure().orElse(null),
+        guard.enabled());
   }
 }

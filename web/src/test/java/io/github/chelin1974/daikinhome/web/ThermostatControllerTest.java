@@ -38,6 +38,16 @@ class ThermostatControllerTest {
     BridgeStatus bridgeStatus() {
       return new BridgeStatus();
     }
+
+    /**
+     * No passcode, which is the default and the behaviour this class already asserted: the
+     * guard lets writes through so the REST API keeps working for callers that predate it.
+     * {@link DashboardRoutesTest} covers the configured case.
+     */
+    @Bean
+    PasscodeGuard passcodeGuard() {
+      return new PasscodeGuard(new DaikinProperties());
+    }
   }
 
   @Autowired MockMvc mvc;

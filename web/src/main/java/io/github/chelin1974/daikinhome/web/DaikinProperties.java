@@ -84,6 +84,19 @@ public class DaikinProperties {
   /** Seconds between metric pushes. */
   private Integer metricsIntervalSeconds;
 
+  /**
+   * Household passcode for the routes that change a thermostat, or blank for none.
+   *
+   * <p>Deliberately not part of {@link BridgeSettings}. Every other setting here is, because
+   * the CLI flavour needs it too - but the CLI jar serves no HTTP at all, so a passcode for
+   * HTTP routes would be a field it could never use. {@code JsonConfig.readAsProperties}
+   * still carries it out of {@code daikin.config.json}, so it is configured the same way as
+   * everything else.
+   *
+   * <p>See {@link PasscodeGuard} for what it protects and what happens when it is unset.
+   */
+  private String dashboardPasscode;
+
   /** Applies defaults, clamping and validation. */
   public BridgeSettings toBridgeSettings() {
     return BridgeSettings.builder()
@@ -250,5 +263,13 @@ public class DaikinProperties {
 
   public void setMetricsIntervalSeconds(Integer metricsIntervalSeconds) {
     this.metricsIntervalSeconds = metricsIntervalSeconds;
+  }
+
+  public String getDashboardPasscode() {
+    return dashboardPasscode;
+  }
+
+  public void setDashboardPasscode(String dashboardPasscode) {
+    this.dashboardPasscode = dashboardPasscode;
   }
 }

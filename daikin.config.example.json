@@ -11,6 +11,9 @@
 
   "prometheusUrl": "",
 
+  "_dashboardPasscode": "Set this to require a passcode before the Thermostat Board page or the REST API may change a thermostat. Blank means anyone on your home network can.",
+  "dashboardPasscode": "",
+
   "bridgeName": "Daikin One",
   "port": 51826
 }

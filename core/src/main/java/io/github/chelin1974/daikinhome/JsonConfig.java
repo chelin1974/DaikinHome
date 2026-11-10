@@ -65,6 +65,15 @@ public final class JsonConfig {
     public String prometheusUrl;
     public String otlpEndpoint;
     public Integer metricsIntervalSeconds;
+
+    /**
+     * Read here only so it survives the trip into {@code readAsProperties}. It is not a
+     * {@link BridgeSettings} field: it guards HTTP routes, and the CLI flavour this class
+     * builds settings for serves no HTTP. Without the field, {@code ignoreUnknown} would
+     * drop it silently and the setting would work from an environment variable but not from
+     * the configuration file - the sort of split that takes an hour to notice.
+     */
+    public String dashboardPasscode;
   }
 
   public static BridgeSettings load(Path file) {
@@ -143,6 +152,8 @@ public final class JsonConfig {
     put(properties, "prometheus-url", raw.prometheusUrl);
     put(properties, "otlp-endpoint", raw.otlpEndpoint);
     put(properties, "metrics-interval-seconds", raw.metricsIntervalSeconds);
+    // Used by the service only; see Raw.dashboardPasscode for why it is not a settings field.
+    put(properties, "dashboard-passcode", raw.dashboardPasscode);
 
     // The data directory is always emitted, and always absolute. The service has no notion of
     // "the configuration file's directory" - it is handed properties, not a file - so resolving

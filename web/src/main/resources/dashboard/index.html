@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Thermostat Board</title>
+<style>
+:root {
+  --bg: #eef1f4; --surface: #fff; --ink: #1a2129; --muted: #5d6b7a; --rule: #cfd7e0;
+  --accent: #2f5f8f; --accent-ink: #fff; --heat: #c0531a; --cool: #1f6f9c; --warn: #b4420f;
+  --display: "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11161c; --surface: #1a2129; --ink: #e6ebf0; --muted: #94a2b1; --rule: #2e3945;
+    --accent: #4b93d1; --accent-ink: #06182b; --heat: #e8803f; --cool: #4fb0da;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, sans-serif;
+  padding: max(16px, env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); }
+.wrap { max-width: 760px; margin: 0 auto; }
+header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 30px; margin: 0; }
+.label { font-family: var(--display); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+.status.live::before { background: var(--cool); } .status.down::before { background: var(--warn); }
+section { background: var(--surface); border: 1px solid var(--rule); border-radius: 14px; padding: 16px; margin-top: 16px; }
+.stat { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.stat h2 { font-family: var(--display); font-weight: 700; font-size: 22px; margin: 0; }
+.stat .where { font-size: 13px; color: var(--muted); }
+.now { font-family: var(--mono); font-size: 30px; font-variant-numeric: tabular-nums; }
+.now .unit { font-size: 15px; color: var(--muted); }
+.readings { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.readings b { color: var(--ink); font-family: var(--mono); font-weight: 500; }
+.pill { font-family: var(--display); font-weight: 700; font-size: 13px; letter-spacing: .04em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--rule); }
+.pill.heat { color: var(--heat); border-color: var(--heat); }
+.pill.cool { color: var(--cool); border-color: var(--cool); }
+.setpoints { display: grid; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.sp { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sp .what { font-family: var(--display); font-size: 15px; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); }
+.spin { display: flex; align-items: center; gap: 8px; }
+.spin output { font-family: var(--mono); font-size: 20px; min-width: 4.5ch; text-align: right; font-variant-numeric: tabular-nums; }
+button { font-family: var(--display); font-weight: 600; font-size: 16px; border: 0; border-radius: 10px;
+  padding: 10px 16px; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--rule); }
+button.step { width: 42px; padding: 10px 0; font-size: 20px; line-height: 1; }
+button:disabled { opacity: .5; cursor: default; }
+.modes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.modes button.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+h3 { font-family: var(--display); font-weight: 700; font-size: 15px; letter-spacing: .03em; text-transform: uppercase;
+  color: var(--muted); margin: 0 0 10px; }
+.note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+.bad { color: var(--warn); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sheet-back { position: fixed; inset: 0; background: rgb(0 0 0 / .45); display: grid; place-items: center; z-index: 10; padding: 16px; }
+.sheet { background: var(--surface); border-radius: 14px; padding: 20px; width: min(360px, 100%); display: grid; gap: 12px; }
+.sheet input { font: inherit; font-size: 18px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--rule);
+  background: var(--bg); color: var(--ink); letter-spacing: .1em; }
+.sheet .actions { display: flex; gap: 8px; justify-content: flex-end; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom));
+  background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; box-shadow: 0 6px 24px rgb(0 0 0 / .25); }
+code { font-family: var(--mono); font-size: 12px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div><div class="label">Daikin</div><h1>Thermostat Board</h1></div>
+    <span class="status" id="status">Connecting…</span>
+  </header>
+
+  <section id="bridge" hidden></section>
+  <div id="thermostats"><section><p class="note">Loading…</p></section></div>
+
+  <p class="note" id="footnote">On your home network only.</p>
+</div>
+
+<div class="sheet-back" id="sheetBack" hidden>
+  <form class="sheet" id="sheet" autocomplete="off">
+    <h3 id="sheetWhat">Enter the household passcode.</h3>
+    <input id="passcode" type="password" inputmode="text" autocomplete="current-password" aria-label="Passcode" required>
+    <span class="bad" id="sheetErr" role="alert" style="min-height:1em;font-size:13px"></span>
+    <div class="actions"><button type="button" class="ghost" id="cancel">Cancel</button><button type="submit">OK</button></div>
+  </form>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let bridge = null, stats = [], lastOk = 0, pending = null, busy = false;
+// Setpoints the user has nudged but not yet sent, so the 5s poll cannot snatch the number
+// back from under their finger mid-edit.
+const draft = new Map();
+
+const num = (v, digits = 1) => v == null ? "—" : Number(v).toFixed(digits);
+
+function pass() { try { return localStorage.getItem("daikin-passcode") || ""; } catch { return ""; } }
+function savePass(v) {
+  try { v ? localStorage.setItem("daikin-passcode", v) : localStorage.removeItem("daikin-passcode"); } catch {}
+}
+function toast(t) {
+  const el = $("toast"); el.textContent = t; el.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, 3500);
+}
+
+async function poll() {
+  try {
+    const [b, t] = await Promise.all([
+      fetch("/api/bridge", {cache: "no-store"}).then(r => r.json()),
+      fetch("/api/thermostats", {cache: "no-store"}).then(r => r.json()),
+    ]);
+    bridge = b; stats = Array.isArray(t) ? t : []; lastOk = Date.now();
+  } catch { /* reported by render() */ }
+  render();
+}
+
+function render() {
+  const s = $("status"), age = (Date.now() - lastOk) / 1000;
+  if (!bridge || age > 20) { s.className = "status down"; s.textContent = "Can't reach the bridge"; }
+  else if (!bridge.running) { s.className = "status down"; s.textContent = "Bridge not running"; }
+  else if (!bridge.discoverable) { s.className = "status down"; s.textContent = "Not discoverable"; }
+  else { s.className = "status live"; s.textContent = "Live"; }
+
+  renderBridge();
+  renderThermostats();
+
+  $("footnote").innerHTML = bridge && bridge.passcodeRequired
+    ? "On your home network only. Changing a thermostat needs the household passcode."
+    : "On your home network only. <b>Anyone on this network can change these thermostats</b> — "
+      + "set <code>dashboardPasscode</code> in <code>daikin.config.json</code> to require a passcode.";
+}
+
+function renderBridge() {
+  if (!bridge) return;
+  const el = $("bridge");
+  const bits = [];
+  if (bridge.error) bits.push(`<p class="bad">${esc(bridge.error)}</p>`);
+  if (bridge.advertisementError) {
+    bits.push(`<p class="bad">HomeKit advertising has stopped: ${esc(bridge.advertisementError)}.
+      Nothing in Apple Home can reach the bridge until it is restarted.</p>`);
+  }
+  if (!bridge.paired && bridge.setupCode) {
+    bits.push(`<h3>Not paired yet</h3><p class="note">In Apple Home, add an accessory and enter
+      <b style="font-family:var(--mono);font-size:18px;color:var(--ink)">${esc(bridge.setupCode)}</b>.</p>`);
+  }
+  bits.push(`<p class="note">${esc(bridge.bridgeName || "Daikin")} ·
+    ${bridge.thermostatCount} thermostat${bridge.thermostatCount === 1 ? "" : "s"} ·
+    HomeKit port ${bridge.homekitPort} · polled every ${Math.round(bridge.pollIntervalSeconds / 60)} min</p>`);
+  el.innerHTML = bits.join("");
+  el.hidden = false;
+}
+
+function renderThermostats() {
+  if (!stats.length) {
+    $("thermostats").innerHTML =
+      `<section><p class="note">${bridge && bridge.running
+        ? "No thermostats on this account."
+        : "Waiting for the first poll."}</p></section>`;
+    return;
+  }
+
+  $("thermostats").innerHTML = stats.map(t => {
+    const state = t.currentState === "heat" ? '<span class="pill heat">Heating</span>'
+      : t.currentState === "cool" ? '<span class="pill cool">Cooling</span>'
+      : `<span class="pill">${esc(t.currentState || "Idle")}</span>`;
+
+    const readings = [
+      t.indoorHumidity != null ? `Indoor humidity <b>${num(t.indoorHumidity, 0)}%</b>` : "",
+      t.outdoorTemperature != null ? `Outdoor <b>${num(t.outdoorTemperature)}°</b>` : "",
+      t.outdoorHumidity != null ? `Outdoor humidity <b>${num(t.outdoorHumidity, 0)}%</b>` : "",
+      t.scheduleEnabled ? "Schedule on" : "",
+      t.model ? esc(t.model) : "",
+    ].filter(Boolean).join("</span><span>");
+
+    return `<section data-id="${esc(t.id)}">
+      <div class="stat">
+        <div><h2>${esc(t.name)}</h2>${t.location ? `<div class="where">${esc(t.location)}</div>` : ""}</div>
+        <div style="display:flex;gap:12px;align-items:center">${state}
+          <div class="now">${num(t.indoorTemperature)}<span class="unit">°</span></div></div>
+      </div>
+      ${readings ? `<div class="readings"><span>${readings}</span></div>` : ""}
+      <div class="modes">
+        ${["off", "heat", "cool", "auto"].map(m =>
+          `<button type="button" class="ghost ${t.targetState === m ? "on" : ""}"
+             data-mode="${m}" data-for="${esc(t.id)}">${m}</button>`).join("")}
+        <button type="button" class="ghost" data-refresh="${esc(t.id)}" title="Read from Daikin now">Refresh</button>
+      </div>
+      <div class="setpoints">
+        ${spRow(t, "heat")}
+        ${spRow(t, "cool")}
+      </div>
+    </section>`;
+  }).join("");
+
+  wire();
+}
+
+function spRow(t, kind) {
+  const key = `${t.id}:${kind}`;
+  const current = draft.has(key) ? draft.get(key) : t[kind === "heat" ? "heatSetpoint" : "coolSetpoint"];
+  if (current == null) return "";
+  const dirty = draft.has(key);
+  return `<div class="sp">
+    <span class="what">${kind} to</span>
+    <div class="spin">
+      <button type="button" class="ghost step" data-nudge="${key}" data-by="-1" aria-label="Lower">−</button>
+      <output>${num(current)}°</output>
+      <button type="button" class="ghost step" data-nudge="${key}" data-by="1" aria-label="Raise">+</button>
+      <button type="button" data-send="${key}" ${dirty ? "" : "disabled"}>Set</button>
+    </div>
+  </div>`;
+}
+
+function wire() {
+  const root = $("thermostats");
+  root.querySelectorAll("[data-nudge]").forEach(b => b.onclick = () => {
+    const key = b.dataset.nudge, by = Number(b.dataset.by);
+    const [id, kind] = key.split(":");
+    const t = stats.find(x => x.id === id);
+    if (!t) return;
+    const base = draft.has(key) ? draft.get(key) : t[kind === "heat" ? "heatSetpoint" : "coolSetpoint"];
+    // The thermostat clamps to its own range anyway, but keeping the page inside it means
+    // the number you see is the number you will get.
+    let next = Number(base) + by;
+    if (t.setpointMinimum != null) next = Math.max(next, t.setpointMinimum);
+    if (t.setpointMaximum != null) next = Math.min(next, t.setpointMaximum);
+    draft.set(key, next);
+    renderThermostats();
+  });
+
+  root.querySelectorAll("[data-send]").forEach(b => b.onclick = () => {
+    const key = b.dataset.send, [id, kind] = key.split(":");
+    const value = draft.get(key);
+    if (value == null) return;
+    send(id, kind === "heat" ? {heatSetpoint: value} : {coolSetpoint: value}, b, () => draft.delete(key));
+  });
+
+  root.querySelectorAll("[data-mode]").forEach(b => b.onclick = () =>
+    send(b.dataset.for, {mode: b.dataset.mode}, b));
+
+  root.querySelectorAll("[data-refresh]").forEach(b => b.onclick = () =>
+    call(`/api/thermostats/${encodeURIComponent(b.dataset.refresh)}/refresh`, "POST", null, b,
+      "Read from Daikin.", () => b.onclick()));
+}
+
+function send(id, body, btn, done) {
+  call(`/api/thermostats/${encodeURIComponent(id)}`, "PUT", body, btn, "Sent.", () => send(id, body, btn, done), done);
+}
+
+async function call(url, method, body, btn, okText, retry, done) {
+  if (busy) return;
+  if (bridge && bridge.passcodeRequired && !pass()) {
+    ask("Enter the passcode to change a thermostat.", retry);
+    return;
+  }
+  busy = true; btn.disabled = true;
+  try {
+    const headers = {};
+    if (body) headers["Content-Type"] = "application/json";
+    const code = pass();
+    if (code) headers["X-Passcode"] = code;
+    const r = await fetch(url, {method, headers, body: body ? JSON.stringify(body) : undefined});
+    if (r.status === 401) { savePass(""); ask("That passcode didn't work.", retry); return; }
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { toast(data.error || `The thermostat didn't take it (${r.status}).`); return; }
+    if (code) savePass(code);
+    if (done) done();
+    // Daikin clamps setpoints into the thermostat's range and keeps heat and cool apart, so
+    // what came back is the truth - show that rather than what was asked for.
+    if (data && data.id) { stats = stats.map(t => t.id === data.id ? data : t); renderThermostats(); }
+    toast(okText);
+  } catch { toast("Couldn't reach the bridge."); }
+  finally { busy = false; btn.disabled = false; setTimeout(poll, 2000); }
+}
+
+function ask(what, then) {
+  $("sheetWhat").textContent = what; $("sheetErr").textContent = ""; $("passcode").value = "";
+  $("sheetBack").hidden = false; pending = then; setTimeout(() => $("passcode").focus(), 30);
+}
+$("sheet").onsubmit = e => {
+  e.preventDefault();
+  const code = $("passcode").value;
+  if (!code) return;
+  savePass(code); $("sheetBack").hidden = true;
+  const t = pending; pending = null; if (t) t();
+};
+$("cancel").onclick = () => { $("sheetBack").hidden = true; pending = null; };
+
+poll();
+setInterval(poll, 5000);
+</script>
+</body>
+</html>
