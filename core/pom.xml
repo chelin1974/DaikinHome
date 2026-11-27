@@ -28,6 +28,17 @@
       <artifactId>jackson-databind</artifactId>
     </dependency>
 
+    <!--
+      Only for the @Generated annotation on the generated client. The generator emits
+      javax.annotation.Generated otherwise, which no JDK has carried since 8, so the
+      generated sources would not compile. 26KB.
+    -->
+    <dependency>
+      <groupId>jakarta.annotation</groupId>
+      <artifactId>jakarta.annotation-api</artifactId>
+      <version>3.0.0</version>
+    </dependency>
+
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
@@ -46,4 +57,63 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <!--
+        Generates the Daikin API client from src/main/resources/openapi/daikin-one.yaml into
+        target/generated-sources, so nothing generated is checked in and the spec is the only
+        thing to review when the API changes.
+
+        The options are not interchangeable:
+
+          library=native      java.net.http.HttpClient, so core stays free of Spring and of a
+                              second HTTP stack. The CLI jar's size depends on this.
+          useJackson3=true    tools.jackson, matching this project. Without it the generator
+                              emits Jackson 2 and core carries two Jackson stacks at once.
+          useJakartaEe=true   jakarta.annotation.Generated instead of javax.annotation's,
+                              which no current JDK has. Purely to make it compile.
+          annotationLibrary=none
+                              no Swagger annotations; nothing here reads them.
+          openApiNullable=false
+                              avoids the jackson-databind-nullable dependency, which has no
+                              Jackson 3 release.
+
+        Generated code is exempt from this project's var/final conventions: it is never
+        hand-edited and is rewritten on every build.
+      -->
+      <plugin>
+        <groupId>org.openapitools</groupId>
+        <artifactId>openapi-generator-maven-plugin</artifactId>
+        <version>7.28.0</version>
+        <executions>
+          <execution>
+            <id>daikin-client</id>
+            <goals>
+              <goal>generate</goal>
+            </goals>
+            <configuration>
+              <inputSpec>${project.basedir}/src/main/resources/openapi/daikin-one.yaml</inputSpec>
+              <generatorName>java</generatorName>
+              <library>native</library>
+              <apiPackage>io.github.chelin1974.daikinhome.daikin.api</apiPackage>
+              <modelPackage>io.github.chelin1974.daikinhome.daikin.model</modelPackage>
+              <invokerPackage>io.github.chelin1974.daikinhome.daikin.invoker</invokerPackage>
+              <generateApiTests>false</generateApiTests>
+              <generateModelTests>false</generateModelTests>
+              <generateApiDocumentation>false</generateApiDocumentation>
+              <generateModelDocumentation>false</generateModelDocumentation>
+              <configOptions>
+                <useJackson3>true</useJackson3>
+                <useJakartaEe>true</useJakartaEe>
+                <annotationLibrary>none</annotationLibrary>
+                <openApiNullable>false</openApiNullable>
+                <hideGenerationTimestamp>true</hideGenerationTimestamp>
+              </configOptions>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>
