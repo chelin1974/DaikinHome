@@ -1,0 +1,290 @@
+openapi: 3.0.3
+
+# The part of Daikin's Cloud Open API that this bridge uses.
+#
+# Daikin publishes prose documentation at https://daikinone.com/openapi/ but, as far as
+# anyone here has found, no machine-readable specification. This file was written from
+# DaikinOneClient, which is the authoritative record of what the bridge actually sends and
+# what it gets back, so it describes those four operations and nothing else. It is not a
+# complete description of Daikin's API, and should not be read as one.
+#
+# Where the hand-written client is deliberately more tolerant than this file, the schema says
+# so in a comment. An OpenAPI schema has to name one shape; the client accepts several,
+# because the listing endpoint has been observed returning more than one.
+
+info:
+  title: Daikin One Cloud Open API (the subset this bridge uses)
+  version: "1.0.0"
+  description: >
+    Thermostat listing, state and control for Daikin One, One Touch and the Amana and
+    Goodman variants of the same hardware. Written from the bridge's own client; see the
+    comment at the top of this file.
+
+servers:
+  - url: https://integrator-api.daikinskyport.com
+    description: Production, and the only host the bridge knows
+
+security:
+  - apiKey: []
+    bearerAuth: []
+
+paths:
+  /v1/token:
+    post:
+      operationId: issueToken
+      summary: Exchange the account email and integrator token for an access token
+      description: >
+        The only unauthenticated operation: it carries the API key but no bearer token.
+        The bridge refreshes a little before expiry rather than waiting for a 401.
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          description: An access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "403":
+          description: >
+            The API key, email or integrator token is wrong. Daikin answers 403 rather than
+            401 here, which is why the bridge treats it as an authentication failure and
+            stops retrying instead of refreshing the token and trying again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/devices:
+    get:
+      operationId: listDevices
+      summary: Every thermostat on the account, grouped by location
+      description: >
+        The documented shape is a list of locations, each holding its devices. The
+        hand-written client also accepts a bare device array and a `{"locations": [...]}`
+        wrapper, because both have been seen in the wild; a generated client will accept
+        only what is written here.
+      responses:
+        "200":
+          description: The locations and their thermostats
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Location"
+
+  /v1/devices/{deviceId}:
+    get:
+      operationId: getDevice
+      summary: One thermostat's current state
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      responses:
+        "200":
+          description: The thermostat's state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "404":
+          description: No thermostat with that ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/devices/{deviceId}/msp:
+    put:
+      operationId: updateDevice
+      summary: Set the mode and/or the setpoints
+      description: >
+        Applied synchronously. Daikin clamps setpoints into the thermostat's own range and
+        keeps heat and cool apart by its minimum separation, so the accepted values can
+        differ from the requested ones - read the device back rather than assuming.
+      parameters:
+        - $ref: "#/components/parameters/DeviceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeviceUpdate"
+      responses:
+        "200":
+          description: The change was accepted
+        "400":
+          description: >
+            The values were rejected, for instance setpoints outside the thermostat's range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: From the Daikin One Home app, under Daikin One Care -> home integration -> developer.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The accessToken from /v1/token.
+
+  parameters:
+    DeviceId:
+      name: deviceId
+      in: path
+      required: true
+      description: The thermostat ID from the listing.
+      schema:
+        type: string
+
+  schemas:
+    TokenRequest:
+      type: object
+      required: [email, integratorToken]
+      properties:
+        email:
+          type: string
+          format: email
+          description: The email address on the Daikin One account.
+        integratorToken:
+          type: string
+          description: Requested in the app under Daikin One Care -> home integration.
+
+    TokenResponse:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken:
+          type: string
+        accessTokenExpiresIn:
+          type: integer
+          format: int64
+          description: >
+            Seconds. Absent or non-positive in some replies, so the client falls back to its
+            own default rather than treating the token as immediately stale.
+
+    Location:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: Carried onto each device as its location name.
+        devices:
+          type: array
+          items:
+            $ref: "#/components/schemas/DeviceSummary"
+
+    DeviceSummary:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          description: Used for every other operation.
+        name:
+          type: string
+          description: Display name; the client falls back to the ID when it is absent.
+        model:
+          type: string
+        firmwareVersion:
+          type: string
+
+    Device:
+      type: object
+      description: >
+        A thermostat's full state. Every reading is nullable: a model that does not report
+        one omits it, and the bridge distinguishes "not reported" from zero.
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        model:
+          type: string
+        firmwareVersion:
+          type: string
+        equipmentStatus:
+          type: integer
+          description: What the equipment is doing now, as a Daikin code.
+        mode:
+          type: integer
+          description: The requested mode, as a Daikin code.
+        modeLimit:
+          type: integer
+        modeEmHeatAvailable:
+          type: boolean
+        fan:
+          type: integer
+        fanCirculate:
+          type: integer
+        fanCirculateSpeed:
+          type: integer
+        heatSetpoint:
+          type: number
+          format: double
+        coolSetpoint:
+          type: number
+          format: double
+        setpointDelta:
+          type: number
+          format: double
+          description: The minimum separation Daikin keeps between the two setpoints.
+        setpointMinimum:
+          type: number
+          format: double
+        setpointMaximum:
+          type: number
+          format: double
+        tempIndoor:
+          type: number
+          format: double
+        humIndoor:
+          type: number
+          format: double
+        tempOutdoor:
+          type: number
+          format: double
+        humOutdoor:
+          type: number
+          format: double
+        scheduleEnabled:
+          type: boolean
+        geofencingEnabled:
+          type: boolean
+
+    DeviceUpdate:
+      type: object
+      description: >
+        Every field is optional; send the ones to change. The bridge always sends both
+        setpoints together with a mode, because Daikin validates them as a set.
+      properties:
+        mode:
+          type: integer
+        heatSetpoint:
+          type: number
+          format: double
+        coolSetpoint:
+          type: number
+          format: double
+
+    Error:
+      type: object
+      description: >
+        Daikin's error replies are not consistently shaped; "message" is the field the
+        bridge has seen and reports.
+      properties:
+        message:
+          type: string
