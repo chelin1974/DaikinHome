@@ -349,9 +349,9 @@ public final class DaikinOneClient implements DaikinCloud {
       final long waitMillis;
       synchronized (lock) {
         final var now = now();
-        final var untilPause = Duration.between(now, pausedUntil).toMillis();
+        final var untilPause = ceilMillis(Duration.between(now, pausedUntil));
         final var untilFloor =
-            Duration.between(now, lastRequestStartedAt.plus(minRequestInterval)).toMillis();
+            ceilMillis(Duration.between(now, lastRequestStartedAt.plus(minRequestInterval)));
         waitMillis = Math.max(untilPause, untilFloor);
         if (waitMillis <= 0) {
           lastRequestStartedAt = now;
@@ -360,6 +360,22 @@ public final class DaikinOneClient implements DaikinCloud {
       }
       sleep(waitMillis);
     }
+  }
+
+  /**
+   * How long to sleep for a remaining duration, rounded up.
+   *
+   * <p>{@link Duration#toMillis()} truncates towards zero, which makes a floor that is not
+   * quite a floor: with 299.7ms left it sleeps 299, comes round again, truncates the
+   * remaining 0.7ms to zero and goes early. One millisecond under per gap is harmless to a
+   * thermostat and fatal to a test that asserts the floor held, and the point of the floor
+   * is to stay the right side of Daikin's rate limiter, so round up instead.
+   *
+   * <p>A duration already past comes back as zero, so the caller stops waiting.
+   */
+  private static long ceilMillis(final Duration remaining) {
+    final var nanos = remaining.toNanos();
+    return nanos <= 0 ? 0L : (nanos + 999_999L) / 1_000_000L;
   }
 
   private void pauseFor(final Duration duration) {
