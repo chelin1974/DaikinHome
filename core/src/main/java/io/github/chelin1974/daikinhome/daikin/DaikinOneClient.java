@@ -2,26 +2,29 @@ package io.github.chelin1974.daikinhome.daikin;
 
 import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinApiException;
 import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinAuthException;
+import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinException;
 import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinNetworkException;
 import static io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinResponseException;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
+import io.github.chelin1974.daikinhome.daikin.api.DefaultApi;
+import io.github.chelin1974.daikinhome.daikin.invoker.ApiClient;
+import io.github.chelin1974.daikinhome.daikin.invoker.ApiException;
+import io.github.chelin1974.daikinhome.daikin.model.Device;
+import io.github.chelin1974.daikinhome.daikin.model.DeviceSummary;
+import io.github.chelin1974.daikinhome.daikin.model.DeviceUpdate;
+import io.github.chelin1974.daikinhome.daikin.model.Location;
+import io.github.chelin1974.daikinhome.daikin.model.TokenRequest;
 import java.io.IOException;
-import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +32,11 @@ import org.slf4j.LoggerFactory;
 /**
  * Client for the Daikin One Cloud Open API.
  *
- * <p>Handles token acquisition and renewal, keeps a floor between requests, retries the
- * failures worth retrying, and flattens the device listing into a plain list.
+ * <p>The HTTP and JSON work is generated from {@code
+ * core/src/main/resources/openapi/daikin-one.yaml} at build time; see {@code core/pom.xml}.
+ * What is left here is everything the specification cannot express: token acquisition and
+ * renewal, a floor between requests, retrying the failures worth retrying, and translating
+ * the generated {@link ApiException} into this package's exceptions.
  *
  * <p>All methods block. Callers run them on a background thread — never on a HomeKit
  * characteristic read, which must return immediately.
@@ -40,7 +46,6 @@ import org.slf4j.LoggerFactory;
 public final class DaikinOneClient implements DaikinCloud {
 
   private static final Logger log = LoggerFactory.getLogger(DaikinOneClient.class);
-  private static final ObjectMapper MAPPER = new ObjectMapper();
 
   public static final String DEFAULT_BASE_URL = "https://integrator-api.daikinskyport.com";
 
@@ -50,15 +55,17 @@ public final class DaikinOneClient implements DaikinCloud {
   /** Used when the token response omits {@code accessTokenExpiresIn}. */
   private static final Duration FALLBACK_TOKEN_TTL = Duration.ofMinutes(10);
 
+  /** The keys {@link #updateDevice} knows how to send; anything else is a mistake, not a hint. */
+  private static final Set<String> UPDATE_KEYS = Set.of("mode", "heatSetpoint", "coolSetpoint");
+
   private final String apiKey;
   private final String email;
   private final String integratorToken;
   private final String baseUrl;
-  private final Duration timeout;
   private final Duration minRequestInterval;
   private final int maxAttempts;
   private final Supplier<Instant> clock;
-  private final HttpClient http;
+  private final DefaultApi api;
 
   /** Guards the token fields and the request pacing fields below. */
   private final Object lock = new Object();
@@ -68,7 +75,7 @@ public final class DaikinOneClient implements DaikinCloud {
   private Instant lastRequestStartedAt = Instant.EPOCH;
   private Instant pausedUntil = Instant.EPOCH;
 
-  private DaikinOneClient(Builder builder) {
+  private DaikinOneClient(final Builder builder) {
     if (isBlank(builder.apiKey) || isBlank(builder.email) || isBlank(builder.integratorToken)) {
       throw new DaikinAuthException("apiKey, email and integratorToken are all required");
     }
@@ -76,41 +83,39 @@ public final class DaikinOneClient implements DaikinCloud {
     this.email = builder.email.trim();
     this.integratorToken = builder.integratorToken.trim();
     this.baseUrl = builder.baseUrl.replaceAll("/+$", "");
-    this.timeout = builder.timeout;
     this.minRequestInterval = builder.minRequestInterval;
     this.maxAttempts = Math.max(1, builder.maxAttempts);
     this.clock = builder.clock;
-    this.http = HttpClient.newBuilder().connectTimeout(builder.timeout).build();
+
+    final var client =
+        new ApiClient(
+                HttpClient.newBuilder().connectTimeout(builder.timeout),
+                ApiClient.createDefaultObjectMapper(),
+                this.baseUrl)
+            .setConnectTimeout(builder.timeout)
+            .setReadTimeout(builder.timeout);
+    this.api = new DefaultApi(client);
   }
 
   public static Builder builder() {
     return new Builder();
   }
 
-  /**
-   * Lists every thermostat on the account.
-   *
-   * <p>The API groups thermostats by location; some accounts return a flat array instead,
-   * so both shapes are accepted.
-   */
+  /** Lists every thermostat on the account, flattening Daikin's location grouping. */
   @Override
   public List<DaikinDeviceSummary> getDevices() {
-    return normaliseDeviceListing(requestJson("GET", "/v1/devices", null, false));
+    return flatten(call("GET /v1/devices", AUTHENTICATED, () -> api.listDevices(authHeaders())));
   }
 
   /** Full state for one thermostat. */
   @Override
-  public DaikinDevice getDevice(String deviceId) {
-    JsonNode payload =
-        requestJson("GET", "/v1/devices/" + encode(deviceId), null, false);
-    if (payload == null || !payload.isObject()) {
-      throw new DaikinResponseException("device " + deviceId + " returned a non-object payload");
+  public DaikinDevice getDevice(final String deviceId) {
+    final var what = "GET /v1/devices/" + ApiClient.urlEncode(String.valueOf(deviceId));
+    final var device = call(what, AUTHENTICATED, () -> api.getDevice(deviceId, authHeaders()));
+    if (device == null) {
+      throw new DaikinResponseException("device " + deviceId + " returned an empty payload");
     }
-    try {
-      return MAPPER.treeToValue(payload, DaikinDevice.class);
-    } catch (Exception e) {
-      throw new DaikinResponseException("could not parse the state of device " + deviceId, e);
-    }
+    return toDaikinDevice(device);
   }
 
   /**
@@ -121,8 +126,16 @@ public final class DaikinOneClient implements DaikinCloud {
    * so callers pass a complete payload rather than a partial patch.
    */
   @Override
-  public void updateDevice(String deviceId, Map<String, Object> update) {
-    requestJson("PUT", "/v1/devices/" + encode(deviceId) + "/msp", update, false);
+  public void updateDevice(final String deviceId, final Map<String, Object> update) {
+    final var body = toDeviceUpdate(update);
+    final var what = "PUT /v1/devices/" + ApiClient.urlEncode(String.valueOf(deviceId)) + "/msp";
+    call(
+        what,
+        AUTHENTICATED,
+        () -> {
+          api.updateDevice(deviceId, body, authHeaders());
+          return null;
+        });
   }
 
   /** Drops the cached token; the next request re-authenticates. */
@@ -136,95 +149,91 @@ public final class DaikinOneClient implements DaikinCloud {
 
   // ---------------------------------------------------------------- requests
 
-  private JsonNode requestJson(String method, String path, Object body, boolean anonymous) {
-    RuntimeException lastError = null;
+  private static final boolean AUTHENTICATED = false;
+  private static final boolean ANONYMOUS = true;
 
-    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+  /** One call to the generated API, as {@link #call} invokes it. */
+  @FunctionalInterface
+  private interface Operation<T> {
+    T invoke() throws ApiException;
+  }
+
+  /**
+   * Runs one generated API call with this client's retry budget, pacing and exception
+   * translation around it.
+   *
+   * @param what the method and path, for log lines and messages
+   * @param anonymous {@link #ANONYMOUS} for the token call itself, which carries no bearer
+   *     token and so must not trigger a re-authentication when it is rejected
+   */
+  private <T> T call(final String what, final boolean anonymous, final Operation<T> operation) {
+    DaikinException lastError = null;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return dispatch(method, path, body, anonymous, attempt);
-      } catch (DaikinAuthException e) {
-        throw e;
-      } catch (DaikinApiException e) {
-        lastError = e;
-        if (!e.isRetryable() || attempt == maxAttempts) {
-          throw e;
+        if (!anonymous) {
+          // Before the pacing slot, not inside the operation: authenticating is itself a
+          // paced request, and the floor belongs between the token call and this one rather
+          // than only in front of the pair.
+          accessToken();
         }
-        backoff(method, path, attempt, e);
-      } catch (DaikinNetworkException e) {
-        lastError = e;
-        if (attempt == maxAttempts) {
-          throw e;
+        awaitSlot();
+        return operation.invoke();
+      } catch (final ApiException e) {
+        final var failure = translate(what, anonymous, attempt, e);
+        final var retryable =
+            failure instanceof DaikinNetworkException
+                || (failure instanceof DaikinApiException http && http.isRetryable());
+        if (!retryable || attempt == maxAttempts) {
+          throw failure;
         }
-        backoff(method, path, attempt, e);
+        lastError = failure;
+        backoff(what, attempt, failure);
       }
     }
 
-    // Unreachable: the loop always returns or leaves lastError set.
+    // Unreachable: the loop returns, or throws on its last attempt.
     throw lastError == null
         ? new IllegalStateException("request loop ended without a result")
         : lastError;
   }
 
-  private void backoff(String method, String path, int attempt, RuntimeException cause) {
-    long millis = (long) Math.pow(2, attempt - 1) * 1_000L;
-    log.debug(
-        "{} {} failed (attempt {}/{}), retrying in {}ms: {}",
-        method,
-        path,
-        attempt,
-        maxAttempts,
-        millis,
-        cause.getMessage());
-    sleep(millis);
-  }
+  /**
+   * Turns a generated {@link ApiException} into this package's exceptions.
+   *
+   * <p>Also the place where a rate limit is noted and a stale token is dropped, because the
+   * response headers and the attempt number are both only in scope here.
+   */
+  private DaikinException translate(
+      final String what, final boolean anonymous, final int attempt, final ApiException error) {
 
-  private JsonNode dispatch(
-      String method, String path, Object body, boolean anonymous, int attempt) {
+    final var status = error.getCode();
 
-    HttpRequest.Builder request =
-        HttpRequest.newBuilder(URI.create(baseUrl + path))
-            .timeout(timeout)
-            .header("x-api-key", apiKey)
-            .header("Accept", "application/json");
-
-    if (!anonymous) {
-      request.header("Authorization", "Bearer " + accessToken());
+    // Status 0 means the call never got an HTTP response: the generated client reports a
+    // transport failure and an unreadable body the same way, and only the cause separates them.
+    if (status == 0) {
+      final var cause = error.getCause();
+      if (cause instanceof IOException || cause instanceof InterruptedException) {
+        return new DaikinNetworkException(
+            what + " could not reach the Daikin API: " + describe(error), error);
+      }
+      return new DaikinResponseException(
+          what + " returned a reply this client could not read: " + describe(error), error);
     }
 
-    if (body == null) {
-      request.method(method, HttpRequest.BodyPublishers.noBody());
-    } else {
-      request.header("Content-Type", "application/json");
-      request.method(method, HttpRequest.BodyPublishers.ofString(writeJson(body)));
-    }
-
-    awaitSlot();
-    HttpResponse<String> response;
-    try {
-      response = http.send(request.build(), HttpResponse.BodyHandlers.ofString());
-    } catch (IOException e) {
-      throw new DaikinNetworkException(
-          method + " " + path + " could not reach the Daikin API: " + describe(e), e);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new DaikinNetworkException(method + " " + path + " was interrupted", e);
-    }
-
-    int status = response.statusCode();
-    String text = response.body() == null ? "" : response.body();
+    final var body = error.getResponseBody() == null ? "" : error.getResponseBody();
 
     // A token can be revoked between our expiry estimate and the actual request.
     // Re-authenticate once and let the retry loop take another pass.
     if (status == 401 && !anonymous && attempt == 1) {
       log.debug("access token rejected, re-authenticating");
       invalidateToken();
-      throw new DaikinApiException("access token rejected", 503, text);
+      return new DaikinApiException("access token rejected", 503, body);
     }
 
     if (status == 429) {
-      Duration retryAfter =
-          parseRetryAfter(response.headers().firstValue("retry-after").orElse(null), now())
-              .orElse(Duration.ofSeconds(60));
+      final var retryAfter =
+          parseRetryAfter(header(error, "retry-after"), now()).orElse(Duration.ofSeconds(60));
       pauseFor(retryAfter);
       log.warn(
           "Daikin API rate limited this integration; pausing requests for {}s",
@@ -232,33 +241,38 @@ public final class DaikinOneClient implements DaikinCloud {
     }
 
     if (status == 401 || status == 403) {
-      throw new DaikinAuthException(
+      return new DaikinAuthException(
           "Daikin API rejected the credentials for "
-              + method
-              + " "
-              + path
+              + what
               + " (HTTP "
               + status
               + "). Check the API key, account email and integrator token in the Daikin One app.");
     }
 
-    if (status < 200 || status >= 300) {
-      throw new DaikinApiException(
-          method + " " + path + " failed with HTTP " + status + ": " + truncate(text),
-          status,
-          text);
-    }
+    return new DaikinApiException(
+        what + " failed with HTTP " + status + ": " + truncate(body), status, body);
+  }
 
-    if (text.isEmpty()) {
-      return null;
-    }
+  private static String header(final ApiException error, final String name) {
+    final var headers = error.getResponseHeaders();
+    return headers == null ? null : headers.firstValue(name).orElse(null);
+  }
 
-    try {
-      return MAPPER.readTree(text);
-    } catch (Exception e) {
-      throw new DaikinResponseException(
-          method + " " + path + " returned invalid JSON: " + truncate(text), e);
-    }
+  private void backoff(final String what, final int attempt, final RuntimeException cause) {
+    final var millis = (long) Math.pow(2, attempt - 1) * 1_000L;
+    log.debug(
+        "{} failed (attempt {}/{}), retrying in {}ms: {}",
+        what,
+        attempt,
+        maxAttempts,
+        millis,
+        cause.getMessage());
+    sleep(millis);
+  }
+
+  /** Every authenticated call carries the API key and the bearer token. */
+  private Map<String, String> authHeaders() {
+    return Map.of("x-api-key", apiKey, "Authorization", "Bearer " + accessToken());
   }
 
   // ------------------------------------------------------------------ tokens
@@ -288,24 +302,27 @@ public final class DaikinOneClient implements DaikinCloud {
 
     log.debug("requesting a Daikin access token");
 
-    Map<String, Object> body =
-        Map.of("email", email, "integratorToken", integratorToken);
+    final var request = new TokenRequest().email(email).integratorToken(integratorToken);
 
-    // Attempt 2 so the 401-retry branch above cannot fire for the token call itself.
-    JsonNode token = dispatch("POST", "/v1/token", body, true, 2);
+    // The one call that carries the API key but no bearer token - asking for a token must not
+    // require one.
+    final var token =
+        call(
+            "POST /v1/token",
+            ANONYMOUS,
+            () -> api.issueToken(request, Map.of("x-api-key", apiKey)));
 
-    String issued = token == null ? null : token.path("accessToken").asString(null);
+    final var issued = token == null ? null : token.getAccessToken();
     if (isBlank(issued)) {
       throw new DaikinAuthException("the Daikin token endpoint did not return an accessToken");
     }
 
-    long ttlSeconds =
-        token.hasNonNull("accessTokenExpiresIn") && token.get("accessTokenExpiresIn").asLong() > 0
-            ? token.get("accessTokenExpiresIn").asLong()
-            : FALLBACK_TOKEN_TTL.toSeconds();
+    final var reported = token.getAccessTokenExpiresIn();
+    final var ttl =
+        Duration.ofSeconds(
+            reported != null && reported > 0 ? reported : FALLBACK_TOKEN_TTL.toSeconds());
 
-    Duration ttl = Duration.ofSeconds(ttlSeconds);
-    Duration effective = ttl.minus(TOKEN_EXPIRY_MARGIN);
+    var effective = ttl.minus(TOKEN_EXPIRY_MARGIN);
     if (effective.compareTo(Duration.ofSeconds(30)) < 0) {
       effective = Duration.ofSeconds(30);
     }
@@ -329,11 +346,11 @@ public final class DaikinOneClient implements DaikinCloud {
    */
   private void awaitSlot() {
     while (true) {
-      long waitMillis;
+      final long waitMillis;
       synchronized (lock) {
-        Instant now = now();
-        long untilPause = Duration.between(now, pausedUntil).toMillis();
-        long untilFloor =
+        final var now = now();
+        final var untilPause = Duration.between(now, pausedUntil).toMillis();
+        final var untilFloor =
             Duration.between(now, lastRequestStartedAt.plus(minRequestInterval)).toMillis();
         waitMillis = Math.max(untilPause, untilFloor);
         if (waitMillis <= 0) {
@@ -345,147 +362,173 @@ public final class DaikinOneClient implements DaikinCloud {
     }
   }
 
-  private void pauseFor(Duration duration) {
+  private void pauseFor(final Duration duration) {
     synchronized (lock) {
-      Instant candidate = now().plus(duration);
+      final var candidate = now().plus(duration);
       if (candidate.isAfter(pausedUntil)) {
         pausedUntil = candidate;
       }
     }
   }
 
-  // ------------------------------------------------------------------ helpers
+  // --------------------------------------------------------------- the models
 
   /**
-   * Flattens {@code GET /v1/devices} into a plain list.
+   * Flattens the listing into a plain list, carrying each location's name onto its
+   * thermostats.
    *
-   * <p>Accepts the documented location-grouped shape, a {@code {"locations": [...]}}
-   * wrapper, and a bare device array.
+   * <p>A location with no devices, and an entry with no id, are skipped rather than
+   * rejected: one unusable entry should not cost the account its other thermostats.
    */
-  public static List<DaikinDeviceSummary> normaliseDeviceListing(JsonNode payload) {
-    List<JsonNode> entries = new ArrayList<>();
-
-    if (payload != null && payload.isArray()) {
-      payload.forEach(entries::add);
-    } else if (payload != null && payload.path("locations").isArray()) {
-      payload.get("locations").forEach(entries::add);
-    } else if (payload != null && payload.path("devices").isArray()) {
-      entries.add(payload);
-    } else {
-      throw new DaikinResponseException(
-          "GET /v1/devices returned an unexpected shape: " + truncate(String.valueOf(payload)));
+  public static List<DaikinDeviceSummary> flatten(final List<Location> locations) {
+    if (locations == null) {
+      throw new DaikinResponseException("GET /v1/devices returned no body");
     }
 
-    List<DaikinDeviceSummary> devices = new ArrayList<>();
-
-    for (JsonNode entry : entries) {
-      if (entry == null || !entry.isObject()) {
+    final var devices = new ArrayList<DaikinDeviceSummary>();
+    for (final var location : locations) {
+      if (location == null || location.getDevices() == null) {
         continue;
       }
-
-      // A location wrapping a list of thermostats.
-      if (entry.path("devices").isArray()) {
-        String locationName =
-            firstText(entry.path("locationName"), entry.path("name")).orElse(null);
-        for (JsonNode device : entry.get("devices")) {
-          toSummary(device, locationName).ifPresent(devices::add);
-        }
-        continue;
+      for (final var device : location.getDevices()) {
+        summarise(device, location.getLocationName()).ifPresent(devices::add);
       }
-
-      // A bare thermostat.
-      toSummary(entry, null).ifPresent(devices::add);
     }
-
     return devices;
   }
 
-  private static Optional<DaikinDeviceSummary> toSummary(JsonNode node, String locationName) {
-    if (node == null || !node.isObject()) {
-      return Optional.empty();
-    }
+  private static Optional<DaikinDeviceSummary> summarise(
+      final DeviceSummary device, final String locationName) {
 
-    Optional<String> id =
-        firstText(node.path("id"), node.path("deviceId"), node.path("thermostatId"));
-    if (id.isEmpty()) {
+    if (device == null || isBlank(device.getId())) {
       return Optional.empty();
     }
 
     // Daikin can return names with stray whitespace ("East Hallway "). HomeKit wants names
     // to start and end with a letter or number, so trim before they reach an accessory.
-    String name =
-        firstText(node.path("name")).map(String::trim).filter(n -> !n.isEmpty()).orElse(id.get());
+    final var id = device.getId();
+    final var reported = device.getName();
+    final var name = isBlank(reported) ? id : reported.trim();
+
     return Optional.of(
         new DaikinDeviceSummary(
-            id.get(),
-            name,
-            node.path("model").isString() ? node.get("model").asString() : null,
-            node.path("firmwareVersion").isString() ? node.get("firmwareVersion").asString() : null,
-            locationName));
+            id, name, device.getModel(), device.getFirmwareVersion(), locationName));
   }
 
+  /**
+   * Copies the generated model onto the bridge's own.
+   *
+   * <p>{@link DaikinDevice} stays hand-written because the rest of the bridge reads it, two
+   * backends fill it, and it is the vocabulary {@link DaikinCloud} is defined in. Fields the
+   * spec does not name are carried across too, so {@code --probe} still shows what a newer
+   * firmware has started reporting.
+   */
+  private static DaikinDevice toDaikinDevice(final Device source) {
+    final var device = new DaikinDevice();
+    device.id = source.getId();
+    device.name = source.getName();
+    device.model = source.getModel();
+    device.firmwareVersion = source.getFirmwareVersion();
+    device.equipmentStatus = source.getEquipmentStatus();
+    device.mode = source.getMode();
+    device.modeLimit = source.getModeLimit();
+    device.modeEmHeatAvailable = source.getModeEmHeatAvailable();
+    device.fan = source.getFan();
+    device.fanCirculate = source.getFanCirculate();
+    device.fanCirculateSpeed = source.getFanCirculateSpeed();
+    device.heatSetpoint = source.getHeatSetpoint();
+    device.coolSetpoint = source.getCoolSetpoint();
+    device.setpointDelta = source.getSetpointDelta();
+    device.setpointMinimum = source.getSetpointMinimum();
+    device.setpointMaximum = source.getSetpointMaximum();
+    device.tempIndoor = source.getTempIndoor();
+    device.humIndoor = source.getHumIndoor();
+    device.tempOutdoor = source.getTempOutdoor();
+    device.humOutdoor = source.getHumOutdoor();
+    device.scheduleEnabled = source.getScheduleEnabled();
+    device.geofencingEnabled = source.getGeofencingEnabled();
+
+    final var extra = source.getAdditionalProperties();
+    if (extra != null) {
+      extra.forEach(device::setAdditional);
+    }
+    return device;
+  }
+
+  /**
+   * Builds the {@code msp} body from the update map {@link DaikinCloud} is defined in.
+   *
+   * <p>An unknown key is rejected rather than ignored: silently dropping one would leave a
+   * caller watching a write that reported success and changed nothing.
+   */
+  private static DeviceUpdate toDeviceUpdate(final Map<String, Object> update) {
+    if (update == null) {
+      throw new DaikinResponseException("an msp update needs a body");
+    }
+
+    final var unknown = new LinkedHashSet<>(update.keySet());
+    unknown.removeAll(UPDATE_KEYS);
+    if (!unknown.isEmpty()) {
+      throw new DaikinResponseException(
+          "the Daikin Open API client cannot send " + unknown + "; it sends " + UPDATE_KEYS);
+    }
+
+    return new DeviceUpdate()
+        .mode(asInteger(update.get("mode")))
+        .heatSetpoint(asDouble(update.get("heatSetpoint")))
+        .coolSetpoint(asDouble(update.get("coolSetpoint")));
+  }
+
+  private static Integer asInteger(final Object value) {
+    return value instanceof Number number ? number.intValue() : null;
+  }
+
+  private static Double asDouble(final Object value) {
+    return value instanceof Number number ? number.doubleValue() : null;
+  }
+
+  // ------------------------------------------------------------------ helpers
+
   /** Retry-After is either delta-seconds or an HTTP date. */
-  public static Optional<Duration> parseRetryAfter(String value, Instant now) {
+  public static Optional<Duration> parseRetryAfter(final String value, final Instant now) {
     if (value == null || value.isBlank()) {
       return Optional.empty();
     }
 
     try {
-      long seconds = Long.parseLong(value.trim());
+      final var seconds = Long.parseLong(value.trim());
       return Optional.of(Duration.ofSeconds(Math.max(0, seconds)));
-    } catch (NumberFormatException ignored) {
+    } catch (final NumberFormatException ignored) {
       // Not delta-seconds; fall through to the HTTP-date form.
     }
 
     try {
-      Instant when = Instant.from(DateTimeFormatter.RFC_1123_DATE_TIME.parse(value.trim()));
-      Duration delay = Duration.between(now, when);
+      final var when = Instant.from(DateTimeFormatter.RFC_1123_DATE_TIME.parse(value.trim()));
+      final var delay = Duration.between(now, when);
       return Optional.of(delay.isNegative() ? Duration.ZERO : delay);
-    } catch (RuntimeException ignored) {
+    } catch (final RuntimeException ignored) {
       return Optional.empty();
     }
-  }
-
-  private static Optional<String> firstText(JsonNode... nodes) {
-    for (JsonNode node : nodes) {
-      if (node != null && node.isString() && !node.asString().isEmpty()) {
-        return Optional.of(node.asString());
-      }
-    }
-    return Optional.empty();
   }
 
   private Instant now() {
     return clock.get();
   }
 
-  private static void sleep(long millis) {
+  private static void sleep(final long millis) {
     try {
       Thread.sleep(millis);
-    } catch (InterruptedException e) {
+    } catch (final InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new DaikinNetworkException("interrupted while waiting to call the Daikin API", e);
     }
   }
 
-  private static String writeJson(Object value) {
-    try {
-      return MAPPER.writeValueAsString(value);
-    } catch (Exception e) {
-      throw new DaikinResponseException("could not serialise the request body", e);
-    }
-  }
-
-  private static String encode(String value) {
-    // URLEncoder is form encoding: it turns a space into '+', which is wrong in a path.
-    return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
-  }
-
-  private static String truncate(String value) {
+  private static String truncate(final String value) {
     return value.length() > 300 ? value.substring(0, 300) + "..." : value;
   }
 
-  private static boolean isBlank(String value) {
+  private static boolean isBlank(final String value) {
     return value == null || value.isBlank();
   }
 
@@ -496,8 +539,8 @@ public final class DaikinOneClient implements DaikinCloud {
    * reset during shutdown, for one — and "could not reach the Daikin API: null" tells nobody
    * anything. Fall back to the exception type, and to its cause when that is also blank.
    */
-  private static String describe(Throwable error) {
-    for (Throwable current = error; current != null; current = current.getCause()) {
+  private static String describe(final Throwable error) {
+    for (var current = error; current != null; current = current.getCause()) {
       if (current.getMessage() != null && !current.getMessage().isBlank()) {
         return current == error
             ? current.getMessage()
@@ -518,45 +561,45 @@ public final class DaikinOneClient implements DaikinCloud {
     private int maxAttempts = 3;
     private Supplier<Instant> clock = Instant::now;
 
-    public Builder apiKey(String value) {
+    public Builder apiKey(final String value) {
       this.apiKey = value;
       return this;
     }
 
-    public Builder email(String value) {
+    public Builder email(final String value) {
       this.email = value;
       return this;
     }
 
-    public Builder integratorToken(String value) {
+    public Builder integratorToken(final String value) {
       this.integratorToken = value;
       return this;
     }
 
-    public Builder baseUrl(String value) {
+    public Builder baseUrl(final String value) {
       if (value != null && !value.isBlank()) {
         this.baseUrl = value;
       }
       return this;
     }
 
-    public Builder timeout(Duration value) {
+    public Builder timeout(final Duration value) {
       this.timeout = value;
       return this;
     }
 
-    public Builder minRequestInterval(Duration value) {
+    public Builder minRequestInterval(final Duration value) {
       this.minRequestInterval = value;
       return this;
     }
 
-    public Builder maxAttempts(int value) {
+    public Builder maxAttempts(final int value) {
       this.maxAttempts = value;
       return this;
     }
 
     /** Overridable clock, so token-expiry behaviour can be tested without waiting. */
-    public Builder clock(Supplier<Instant> value) {
+    public Builder clock(final Supplier<Instant> value) {
       this.clock = value;
       return this;
     }
@@ -567,7 +610,8 @@ public final class DaikinOneClient implements DaikinCloud {
   }
 
   /** Convenience for callers that only need the credentials. */
-  public static DaikinOneClient create(String apiKey, String email, String integratorToken) {
+  public static DaikinOneClient create(
+      final String apiKey, final String email, final String integratorToken) {
     return builder().apiKey(apiKey).email(email).integratorToken(integratorToken).build();
   }
 

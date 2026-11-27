@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import tools.jackson.databind.ObjectMapper;
 import io.github.chelin1974.daikinhome.daikin.DaikinDevice;
 import io.github.chelin1974.daikinhome.daikin.DaikinDeviceSummary;
 import io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinApiException;
@@ -13,6 +12,8 @@ import io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinAuthExcepti
 import io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinNetworkException;
 import io.github.chelin1974.daikinhome.daikin.DaikinExceptions.DaikinResponseException;
 import io.github.chelin1974.daikinhome.daikin.DaikinOneClient;
+import io.github.chelin1974.daikinhome.daikin.model.DeviceSummary;
+import io.github.chelin1974.daikinhome.daikin.model.Location;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -28,15 +29,22 @@ class DaikinOneClientTest {
 
   @Test
   @DisplayName("trims names, since Daikin returns some with trailing spaces")
-  void trimsNames() throws Exception {
+  void trimsNames() {
     List<DaikinDeviceSummary> devices =
-        DaikinOneClient.normaliseDeviceListing(
-            MAPPER.readTree("[{\"id\": \"1\", \"name\": \"East Hallway \"}, {\"id\": \"2\", \"name\": \"  \"}]"));
+        DaikinOneClient.flatten(
+            List.of(location(null, summary("1", "East Hallway "), summary("2", "  "))));
     assertEquals("East Hallway", devices.get(0).name());
     assertEquals("2", devices.get(1).name());
   }
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  /** The generated listing models, as Daikin returns them. */
+  private static Location location(String name, DeviceSummary... devices) {
+    return new Location().locationName(name).devices(List.of(devices));
+  }
+
+  private static DeviceSummary summary(String id, String name) {
+    return new DeviceSummary().id(id).name(name);
+  }
 
   private FakeDaikinCloud cloud;
 
@@ -169,6 +177,33 @@ class DaikinOneClientTest {
     assertEquals(Boolean.TRUE, device.scheduleEnabled);
   }
 
+  /**
+   * The generated model only names the fields the spec names, so without the spec's
+   * {@code additionalProperties} this would quietly drop everything else - and {@code --probe}
+   * exists precisely to show the fields a newer firmware has started reporting.
+   */
+  @Test
+  @DisplayName("keeps fields the spec does not name, so the probe tool can still show them")
+  void keepsUnknownFields() {
+    cloud.device.put("fanCirculateSpeedHigh", 3);
+
+    DaikinDevice device = client().getDevice(cloud.deviceId());
+
+    assertEquals(3, device.getAdditional().get("fanCirculateSpeedHigh"));
+  }
+
+  @Test
+  @DisplayName("refuses an msp key it cannot send, rather than dropping it")
+  void refusesUnknownMspKeys() {
+    DaikinResponseException error =
+        assertThrows(
+            DaikinResponseException.class,
+            () -> client().updateDevice(cloud.deviceId(), Map.of("fan", 1)));
+
+    assertTrue(error.getMessage().contains("fan"), error.getMessage());
+    assertEquals(0, cloud.writes.size());
+  }
+
   @Test
   @DisplayName("PUTs the full msp payload")
   void writesMsp() {
@@ -259,19 +294,19 @@ class DaikinOneClientTest {
 
   @Test
   @DisplayName("flattens the documented location-grouped listing")
-  void normalisesLocationGroupedListing() throws Exception {
+  void normalisesLocationGroupedListing() {
     List<DaikinDeviceSummary> devices =
-        DaikinOneClient.normaliseDeviceListing(
-            MAPPER.readTree(
-                """
-                [
-                  {"locationName": "Home", "devices": [
-                    {"id": "1", "name": "Upstairs", "model": "ONEPLUS", "firmwareVersion": "3.1"},
-                    {"id": "2", "name": "Downstairs"}
-                  ]},
-                  {"locationName": "Cabin", "devices": [{"id": "3", "name": "Cabin"}]}
-                ]
-                """));
+        DaikinOneClient.flatten(
+            List.of(
+                location(
+                    "Home",
+                    new DeviceSummary()
+                        .id("1")
+                        .name("Upstairs")
+                        .model("ONEPLUS")
+                        .firmwareVersion("3.1"),
+                    summary("2", "Downstairs")),
+                location("Cabin", summary("3", "Cabin"))));
 
     assertEquals(3, devices.size());
     assertEquals(
@@ -281,44 +316,23 @@ class DaikinOneClientTest {
   }
 
   @Test
-  @DisplayName("accepts a bare device array and a locations wrapper")
-  void normalisesOtherShapes() throws Exception {
-    assertEquals(
-        1,
-        DaikinOneClient.normaliseDeviceListing(
-                MAPPER.readTree("[{\"id\": \"1\", \"name\": \"Hall\"}]"))
-            .size());
-
-    List<DaikinDeviceSummary> wrapped =
-        DaikinOneClient.normaliseDeviceListing(
-            MAPPER.readTree(
-                "{\"locations\": [{\"name\": \"Home\", \"devices\": [{\"id\": \"1\", \"name\": \"Hall\"}]}]}"));
-
-    assertEquals(1, wrapped.size());
-    assertEquals("Home", wrapped.get(0).locationName());
-  }
-
-  @Test
   @DisplayName("falls back to the id when a thermostat has no name, and skips entries with no id")
-  void normalisesEdgeCases() throws Exception {
-    assertEquals(
-        "1",
-        DaikinOneClient.normaliseDeviceListing(MAPPER.readTree("[{\"id\": \"1\"}]"))
-            .get(0)
-            .name());
+  void normalisesEdgeCases() {
+    assertEquals("1", DaikinOneClient.flatten(List.of(location(null, summary("1", null)))).get(0).name());
 
+    // A location with no devices, and a device with no id, are skipped rather than rejected:
+    // one unusable entry should not cost the account its other thermostats.
     assertEquals(
         0,
-        DaikinOneClient.normaliseDeviceListing(MAPPER.readTree("[{\"name\": \"nameless\"}, null, 7]"))
+        DaikinOneClient.flatten(
+                List.of(new Location().locationName("Home"), location(null, summary(null, "nameless"))))
             .size());
   }
 
   @Test
-  @DisplayName("rejects a shape it cannot interpret")
-  void rejectsUnknownShape() throws Exception {
-    assertThrows(
-        DaikinResponseException.class,
-        () -> DaikinOneClient.normaliseDeviceListing(MAPPER.readTree("\"nope\"")));
+  @DisplayName("rejects a listing with no body at all")
+  void rejectsMissingListing() {
+    assertThrows(DaikinResponseException.class, () -> DaikinOneClient.flatten(null));
   }
 
   @Test

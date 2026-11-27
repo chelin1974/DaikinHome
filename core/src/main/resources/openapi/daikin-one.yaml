@@ -3,14 +3,13 @@ openapi: 3.0.3
 # The part of Daikin's Cloud Open API that this bridge uses.
 #
 # Daikin publishes prose documentation at https://daikinone.com/openapi/ but, as far as
-# anyone here has found, no machine-readable specification. This file was written from
-# DaikinOneClient, which is the authoritative record of what the bridge actually sends and
-# what it gets back, so it describes those four operations and nothing else. It is not a
-# complete description of Daikin's API, and should not be read as one.
+# anyone here has found, no machine-readable specification. This file was written from the
+# bridge's own request log, so it describes those four operations and nothing else. It is not
+# a complete description of Daikin's API, and should not be read as one.
 #
-# Where the hand-written client is deliberately more tolerant than this file, the schema says
-# so in a comment. An OpenAPI schema has to name one shape; the client accepts several,
-# because the listing endpoint has been observed returning more than one.
+# The client is generated from this file at build time (see core/pom.xml), so this is not a
+# description of the client - it is the client. Loosening a schema here loosens what the
+# bridge accepts, and narrowing one narrows it.
 
 info:
   title: Daikin One Cloud Open API (the subset this bridge uses)
@@ -69,11 +68,11 @@ paths:
         An array of locations, each holding its devices. Confirmed against a live account:
         the reply was an array whose entries carry `locationName` and `devices`.
 
-        The hand-written client also accepts a bare device array and a
-        `{"locations": [...]}` wrapper. Those two branches were written defensively in the
-        bridge's first commit, not in response to a reply anyone saw, and the one account
-        checked since does not use either. They are kept because this API is undocumented
-        in its details and one account is not a survey - but nothing is known to need them.
+        The bridge used to also accept a bare device array and a `{"locations": [...]}`
+        wrapper. Both branches were written defensively in its first commit, not in response
+        to a reply anyone saw, and the one account checked since uses neither, so they went
+        when this schema became the client. If an account turns out to answer differently,
+        the fix is a new shape here rather than tolerance in hand-written code.
       responses:
         "200":
           description: The locations and their thermostats
@@ -186,9 +185,7 @@ components:
       properties:
         locationName:
           type: string
-          description: >
-            Carried onto each device as its location name. The client also accepts `name`
-            here, which nothing has been observed to send.
+          description: Carried onto each device as its location name.
         devices:
           type: array
           items:
@@ -214,6 +211,10 @@ components:
       description: >
         A thermostat's full state. Every reading is nullable: a model that does not report
         one omits it, and the bridge distinguishes "not reported" from zero.
+      # Daikin adds fields with firmware, and `--probe` exists to show them. Without this the
+      # generated model would drop anything not named below and the probe tool would print a
+      # subset of the reply while looking complete.
+      additionalProperties: true
       properties:
         id:
           type: string
