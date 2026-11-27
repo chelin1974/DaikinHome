@@ -66,13 +66,14 @@ paths:
       operationId: listDevices
       summary: Every thermostat on the account, grouped by location
       description: >
-        The documented shape is a list of locations, each holding its devices.
+        An array of locations, each holding its devices. Confirmed against a live account:
+        the reply was an array whose entries carry `locationName` and `devices`.
 
         The hand-written client also accepts a bare device array and a
         `{"locations": [...]}` wrapper. Those two branches were written defensively in the
-        bridge's first commit, not added in response to a reply anyone saw, so there is no
-        evidence either shape is real. A generated client accepts only what is written
-        here, which is the documented one.
+        bridge's first commit, not in response to a reply anyone saw, and the one account
+        checked since does not use either. They are kept because this API is undocumented
+        in its details and one account is not a survey - but nothing is known to need them.
       responses:
         "200":
           description: The locations and their thermostats
@@ -179,12 +180,15 @@ components:
 
     Location:
       type: object
+      description: >
+        Confirmed against a live account: GET /v1/devices returns an array of these, and an
+        entry carries exactly `locationName` and `devices`. There is no location `id`.
       properties:
-        id:
+        locationName:
           type: string
-        name:
-          type: string
-          description: Carried onto each device as its location name.
+          description: >
+            Carried onto each device as its location name. The client also accepts `name`
+            here, which nothing has been observed to send.
         devices:
           type: array
           items:
