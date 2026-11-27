@@ -66,10 +66,13 @@ paths:
       operationId: listDevices
       summary: Every thermostat on the account, grouped by location
       description: >
-        The documented shape is a list of locations, each holding its devices. The
-        hand-written client also accepts a bare device array and a `{"locations": [...]}`
-        wrapper, because both have been seen in the wild; a generated client will accept
-        only what is written here.
+        The documented shape is a list of locations, each holding its devices.
+
+        The hand-written client also accepts a bare device array and a
+        `{"locations": [...]}` wrapper. Those two branches were written defensively in the
+        bridge's first commit, not added in response to a reply anyone saw, so there is no
+        evidence either shape is real. A generated client accepts only what is written
+        here, which is the documented one.
       responses:
         "200":
           description: The locations and their thermostats
